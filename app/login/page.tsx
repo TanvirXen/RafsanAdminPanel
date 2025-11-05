@@ -4,40 +4,45 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { AlertCircle, Lock, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { apiPost } from "@/lib/client/api"
+import { AlertCircle, Mail, Lock } from "lucide-react"
+import Link from "next/link"
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
-
-    if (!email || !password) {
-      setError("Please enter both email and password")
-      return
-    }
-
+    setError("")
     setIsLoading(true)
 
-    try {
-      await apiPost("/api/auth/login", { email, password })
-      router.push("/admin")
-    } catch (err) {
-      setError((err as Error).message || "Login failed. Please try again.")
-    } finally {
-      setIsLoading(false)
+    // Mock authentication - replace with real API call
+    if (email && password) {
+      try {
+        // Simulate API call
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        // Store auth token in localStorage
+        localStorage.setItem("adminToken", JSON.stringify({ email, timestamp: Date.now() }))
+        localStorage.setItem("isAuthenticated", "true")
+
+        // Redirect to admin dashboard
+        router.push("/admin")
+      } catch (err) {
+        setError("Login failed. Please try again.")
+      }
+    } else {
+      setError("Please enter both email and password")
     }
+
+    setIsLoading(false)
   }
 
   return (
@@ -97,6 +102,10 @@ export default function LoginPage() {
               {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-xs text-muted-foreground">
+            <p>Demo credentials: any email and password</p>
+          </div>
         </CardContent>
       </Card>
     </div>

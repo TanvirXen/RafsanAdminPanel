@@ -74,7 +74,6 @@ export function ReelForm({ initialData, shows, onSave, onCancel }: ReelFormProps
         value={formData.thumbnail}
         onChange={(value) => setFormData({ ...formData, thumbnail: value })}
         placeholder="Upload or paste thumbnail URL"
-        category="reels/thumbnails"
       />
 
       <div className="space-y-2">

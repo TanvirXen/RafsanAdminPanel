@@ -81,10 +81,6 @@ export default function AdminLayout({
     )
   }
 
-  if (!user) {
-    return null
-  }
-
   return (
     <div className="flex h-screen">
       {/* Desktop Sidebar */}

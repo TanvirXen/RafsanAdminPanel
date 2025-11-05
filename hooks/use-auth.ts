@@ -2,60 +2,43 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { apiFetch } from "@/lib/client/api"
 
 interface AuthUser {
   email: string
-  name?: string
-  role: string
-  id: string
-  createdAt?: string
-  updatedAt?: string
+  timestamp: number
 }
 
 export function useAuth() {
   const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    let active = true
+    // Check if user is logged in
+    const isAuthenticated = localStorage.getItem("isAuthenticated")
+    const storedAuth = localStorage.getItem("adminToken")
 
-    async function fetchProfile() {
+    if (isAuthenticated && storedAuth) {
       try {
-        setIsLoading(true)
-        setError(null)
-        const data = await apiFetch<{ user: AuthUser }>("/api/auth/me")
-        if (!active) return
-        setUser(data.user)
-      } catch (err) {
-        if (!active) return
-        setUser(null)
-        setError((err as Error).message)
+        const auth = JSON.parse(storedAuth)
+        setUser(auth)
+      } catch {
+        localStorage.removeItem("adminToken")
+        localStorage.removeItem("isAuthenticated")
         router.push("/login")
-      } finally {
-        if (active) {
-          setIsLoading(false)
-        }
       }
+    } else {
+      router.push("/login")
     }
-
-    void fetchProfile()
-
-    return () => {
-      active = false
-    }
+    setIsLoading(false)
   }, [router])
 
   const logout = () => {
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" })
-      .catch(() => {})
-      .finally(() => {
-        setUser(null)
-        router.push("/login")
-      })
+    localStorage.removeItem("adminToken")
+    localStorage.removeItem("isAuthenticated")
+    setUser(null)
+    router.push("/login")
   }
 
-  return { user, isLoading, error, logout }
+  return { user, isLoading, logout }
 }

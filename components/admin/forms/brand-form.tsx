@@ -43,7 +43,6 @@ export function BrandForm({ initialData, onSave, onCancel }: BrandFormProps) {
         value={formData.imageLink}
         onChange={(value) => setFormData({ ...formData, imageLink: value })}
         placeholder="Upload or paste logo image URL"
-        category="brands"
       />
 
       <div className="space-y-2">

@@ -90,7 +90,6 @@ export function EpisodeForm({ initialData, shows, seasons, onSave, onCancel }: E
         value={formData.thumbnail}
         onChange={(value) => setFormData({ ...formData, thumbnail: value })}
         placeholder="Upload or paste thumbnail URL"
-        category="episodes/thumbnails"
       />
 
       <div className="space-y-2">

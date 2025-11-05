@@ -15,12 +15,11 @@ import { Plus, X, GripVertical } from "lucide-react"
 
 interface EventFormProps {
   initialData?: any
-  brands?: Array<{ _id: string; brandName: string }>
   onSave: (data: any) => void
   onCancel: () => void
 }
 
-const fallbackBrands = [
+const availableBrands = [
   { _id: "1", brandName: "TechCorp" },
   { _id: "2", brandName: "InnovateLabs" },
   { _id: "3", brandName: "DevTools Inc" },
@@ -36,7 +35,7 @@ interface CustomField {
   options?: string[]
 }
 
-export function EventForm({ initialData, brands = fallbackBrands, onSave, onCancel }: EventFormProps) {
+export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
   const [formData, setFormData] = useState({
     title: initialData?.title || "",
     date: initialData?.date || [""],
@@ -45,7 +44,7 @@ export function EventForm({ initialData, brands = fallbackBrands, onSave, onCanc
     description: initialData?.description || "",
     imageLinkBg: initialData?.imageLinkBg || "",
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
-    brands: (initialData?.brandIds || initialData?.brands || []).map((id: string) => String(id)),
+    brands: initialData?.brands || [],
     customFields: initialData?.customFields || [],
     category: initialData?.category || "event", // Added category field
   })
@@ -69,10 +68,10 @@ export function EventForm({ initialData, brands = fallbackBrands, onSave, onCanc
     setFormData({ ...formData, date: newDates })
   }
 
-  const toggleBrand = (brandId: string) => {
-    const brands = formData.brands.includes(brandId)
-      ? formData.brands.filter((b: string) => b !== brandId)
-      : [...formData.brands, brandId]
+  const toggleBrand = (brandName: string) => {
+    const brands = formData.brands.includes(brandName)
+      ? formData.brands.filter((b: string) => b !== brandName)
+      : [...formData.brands, brandName]
     setFormData({ ...formData, brands })
   }
 
@@ -220,21 +219,19 @@ export function EventForm({ initialData, brands = fallbackBrands, onSave, onCanc
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-      <ImageUpload
-        label="Background Image"
-        value={formData.imageLinkBg}
-        onChange={(value) => setFormData({ ...formData, imageLinkBg: value })}
-        placeholder="Upload or paste background image URL"
-        category="events/background"
-      />
+        <ImageUpload
+          label="Background Image"
+          value={formData.imageLinkBg}
+          onChange={(value) => setFormData({ ...formData, imageLinkBg: value })}
+          placeholder="Upload or paste background image URL"
+        />
 
-      <ImageUpload
-        label="Overlay Image"
-        value={formData.imageLinkOverlay}
-        onChange={(value) => setFormData({ ...formData, imageLinkOverlay: value })}
-        placeholder="Upload or paste overlay image URL"
-        category="events/overlay"
-      />
+        <ImageUpload
+          label="Overlay Image"
+          value={formData.imageLinkOverlay}
+          onChange={(value) => setFormData({ ...formData, imageLinkOverlay: value })}
+          placeholder="Upload or paste overlay image URL"
+        />
       </div>
 
       <Card>
@@ -244,12 +241,12 @@ export function EventForm({ initialData, brands = fallbackBrands, onSave, onCanc
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
-            {brands.map((brand) => (
+            {availableBrands.map((brand) => (
               <div key={brand._id} className="flex items-center space-x-2">
                 <Checkbox
                   id={`brand-${brand._id}`}
-                  checked={formData.brands.includes(brand._id)}
-                  onCheckedChange={() => toggleBrand(brand._id)}
+                  checked={formData.brands.includes(brand.brandName)}
+                  onCheckedChange={() => toggleBrand(brand.brandName)}
                 />
                 <label
                   htmlFor={`brand-${brand._id}`}

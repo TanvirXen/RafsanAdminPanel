@@ -14,7 +14,6 @@ interface ImageUploadProps {
   onChange: (value: string) => void
   placeholder?: string
   required?: boolean
-  category?: string
 }
 
 export function ImageUpload({
@@ -23,57 +22,10 @@ export function ImageUpload({
   onChange,
   placeholder = "https://...",
   required = false,
-  category = "general",
 }: ImageUploadProps) {
   const [preview, setPreview] = useState<string>(value || "")
   const [isDragging, setIsDragging] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const getExistingPath = () => {
-    if (!value) return null
-    if (value.startsWith("/uploads/")) {
-      return `public${value}`
-    }
-    if (value.startsWith("public/")) {
-      return value
-    }
-    return null
-  }
-
-  const uploadFile = async (file: File) => {
-    setIsUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("category", category)
-      const existingPath = getExistingPath()
-      if (existingPath) {
-        formData.append("existingPath", existingPath)
-      }
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: "Upload failed" }))
-        throw new Error(error.message || "Upload failed")
-      }
-
-      const json = await response.json()
-      const newUrl = json.url as string
-      setPreview(newUrl)
-      onChange(newUrl)
-      return newUrl
-    } catch (error: any) {
-      alert(error.message || "Failed to upload image")
-      throw error
-    } finally {
-      setIsUploading(false)
-    }
-  }
 
   const handleFileSelect = (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -81,7 +33,13 @@ export function ImageUpload({
       return
     }
 
-    void uploadFile(file)
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      setPreview(result)
+      onChange(result)
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -158,9 +116,8 @@ export function ImageUpload({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="font-semibold text-primary hover:underline"
-              disabled={isUploading}
             >
-              {isUploading ? "Uploading..." : "Click to upload"}
+              Click to upload
             </button>
             <span className="text-muted-foreground"> or drag and drop</span>
           </div>

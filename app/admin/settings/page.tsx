@@ -273,7 +273,6 @@ export default function SettingsPage() {
             value={heroSection.image}
             onChange={(value) => setHeroSection((prev) => ({ ...prev, image: value }))}
             placeholder="Upload or paste hero image URL"
-            category="settings/hero"
           />
 
           <Separator />
@@ -335,7 +334,6 @@ export default function SettingsPage() {
             value={aboutSection.image}
             onChange={(value) => setAboutSection((prev) => ({ ...prev, image: value }))}
             placeholder="Upload or paste about image URL"
-            category="settings/about"
           />
 
           <Separator />

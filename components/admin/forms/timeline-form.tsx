@@ -59,7 +59,6 @@ export function TimelineForm({ initialData, onSave, onCancel }: TimelineFormProp
         onChange={(value) => setFormData({ ...formData, imageLink: value })}
         placeholder="Upload or paste timeline image URL"
         required
-        category="timeline"
       />
 
       <div className="space-y-2">

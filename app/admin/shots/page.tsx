@@ -138,7 +138,6 @@ export default function ShotsPage() {
               value={formData.image}
               onChange={(value) => setFormData({ ...formData, image: value })}
               placeholder="Upload or paste image URL"
-              category="shots"
             />
 
             <div className="space-y-2">

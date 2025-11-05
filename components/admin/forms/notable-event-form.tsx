@@ -59,7 +59,6 @@ export function NotableEventForm({ initialData, onSave, onCancel }: NotableEvent
         onChange={(value) => setFormData({ ...formData, imageLink: value })}
         placeholder="Upload or paste event image URL"
         required
-        category="notable-events"
       />
 
       <div className="space-y-2">

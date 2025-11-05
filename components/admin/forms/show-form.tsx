@@ -81,7 +81,6 @@ export function ShowForm({ initialData, onSave, onCancel }: ShowFormProps) {
         value={formData.thumbnail}
         onChange={(value) => setFormData({ ...formData, thumbnail: value })}
         placeholder="Upload or paste thumbnail URL"
-        category="shows/thumbnails"
       />
 
       <ImageUpload
@@ -89,7 +88,6 @@ export function ShowForm({ initialData, onSave, onCancel }: ShowFormProps) {
         value={formData.heroImage}
         onChange={(value) => setFormData({ ...formData, heroImage: value })}
         placeholder="Upload or paste hero image URL"
-        category="shows/hero"
       />
 
       <div className="flex items-center space-x-2">
