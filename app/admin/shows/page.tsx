@@ -1,334 +1,607 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { PageHeader } from "@/components/admin/page-header"
-import { DataTable } from "@/components/admin/data-table"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ShowForm } from "@/components/admin/forms/show-form"
-import { SeasonForm } from "@/components/admin/forms/season-form"
-import { EpisodeForm } from "@/components/admin/forms/episode-form"
-import { ReelForm } from "@/components/admin/forms/reel-form"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Film, List, Grid3x3 } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react";
+import apiList from "@/apiList";
+
+import { PageHeader } from "@/components/admin/page-header";
+import { DataTable } from "@/components/admin/data-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ShowForm } from "@/components/admin/forms/show-form";
+import { SeasonForm } from "@/components/admin/forms/season-form";
+import { EpisodeForm } from "@/components/admin/forms/episode-form";
+import { ReelForm } from "@/components/admin/forms/reel-form";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Film, List, Grid3x3 } from "lucide-react";
+import { toast } from "react-toastify";
 
 interface Show {
-  _id: string
-  title: string
-  seasons?: number
-  reels?: number
-  featured: boolean
-  description: string
-  episodeId?: string
-  reelsId?: string
+  _id: string;
+  title: string;
+  seasons?: number;
+  reels?: number;
+  featured: boolean;
+  description?: string;
+  thumbnail?: string;
+  heroImage?: string;
 }
 
 interface Season {
-  _id: string
-  title: string
-  showId: string
-  showTitle?: string
-  episodeId?: string
-  description: string
+  _id: string;
+  title: string;
+  showId: string;
+  description?: string;
+  showTitle?: string; // derived client-side
 }
 
 interface Episode {
-  _id: string
-  title: string
-  showId: string
-  showTitle?: string
-  seasonId: string
-  seasonTitle?: string
-  thumbnail: string
-  link: string
+  _id: string;
+  title: string;
+  showId: string;
+  seasonId: string;
+  thumbnail?: string;
+  link?: string;
+  featured?: boolean;
+  showTitle?: string; // derived
+  seasonTitle?: string; // derived
 }
 
 interface Reel {
-  _id: string
-  title: string
-  showId: string
-  showTitle?: string
-  description: string
-  thumbnail: string
-  link: string
+  _id: string;
+  title: string;
+  showId: string;
+  description?: string;
+  thumbnail?: string;
+  link?: string;
+  showTitle?: string; // derived
 }
 
-const mockShows: Show[] = [
-  {
-    _id: "1",
-    title: "Breaking Boundaries",
-    seasons: 3,
-    reels: 12,
-    featured: true,
-    description: "A groundbreaking series exploring innovation",
-  },
-  {
-    _id: "2",
-    title: "Tech Talks",
-    seasons: 2,
-    reels: 8,
-    featured: false,
-    description: "Conversations with industry leaders",
-  },
-  {
-    _id: "3",
-    title: "Future Forward",
-    seasons: 1,
-    reels: 5,
-    featured: true,
-    description: "Looking ahead at emerging technologies",
-  },
-]
-
-const mockSeasons: Season[] = [
-  {
-    _id: "s1",
-    title: "Season 1",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    description: "The beginning of an incredible journey",
-  },
-  {
-    _id: "s2",
-    title: "Season 2",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    description: "Continuing the adventure",
-  },
-  {
-    _id: "s3",
-    title: "Season 1",
-    showId: "2",
-    showTitle: "Tech Talks",
-    description: "First season of tech conversations",
-  },
-]
-
-const mockEpisodes: Episode[] = [
-  {
-    _id: "e1",
-    title: "Pilot Episode",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    seasonId: "s1",
-    seasonTitle: "Season 1",
-    thumbnail: "/placeholder.svg?height=200&width=300",
-    link: "https://example.com/episode1",
-  },
-  {
-    _id: "e2",
-    title: "The Innovation",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    seasonId: "s1",
-    seasonTitle: "Season 1",
-    thumbnail: "/placeholder.svg?height=200&width=300",
-    link: "https://example.com/episode2",
-  },
-  {
-    _id: "e3",
-    title: "New Beginnings",
-    showId: "2",
-    showTitle: "Tech Talks",
-    seasonId: "s3",
-    seasonTitle: "Season 1",
-    thumbnail: "/placeholder.svg?height=200&width=300",
-    link: "https://example.com/episode3",
-  },
-]
-
-const mockReels: Reel[] = [
-  {
-    _id: "r1",
-    title: "Behind the Scenes",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    description: "Quick look at our production",
-    thumbnail: "/placeholder.svg?height=400&width=300",
-    link: "https://example.com/reel1",
-  },
-  {
-    _id: "r2",
-    title: "Highlights Reel",
-    showId: "1",
-    showTitle: "Breaking Boundaries",
-    description: "Best moments compilation",
-    thumbnail: "/placeholder.svg?height=400&width=300",
-    link: "https://example.com/reel2",
-  },
-  {
-    _id: "r3",
-    title: "Tech Tips",
-    showId: "2",
-    showTitle: "Tech Talks",
-    description: "Quick tech insights",
-    thumbnail: "/placeholder.svg?height=400&width=300",
-    link: "https://example.com/reel3",
-  },
-]
-
 export default function ShowsPage() {
-  const [shows, setShows] = useState<Show[]>(mockShows)
-  const [seasons, setSeasons] = useState<Season[]>(mockSeasons)
-  const [episodes, setEpisodes] = useState<Episode[]>(mockEpisodes)
-  const [reels, setReels] = useState<Reel[]>(mockReels)
+  const [shows, setShows] = useState<Show[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [reels, setReels] = useState<Reel[]>([]);
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingShow, setEditingShow] = useState<Show | null>(null)
-  const [editingSeason, setEditingSeason] = useState<Season | null>(null)
-  const [editingEpisode, setEditingEpisode] = useState<Episode | null>(null)
-  const [editingReel, setEditingReel] = useState<Reel | null>(null)
-  const [dialogType, setDialogType] = useState<"show" | "season" | "episode" | "reel">("show")
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState<
+    "show" | "season" | "episode" | "reel"
+  >("show");
 
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
+  const [editingShow, setEditingShow] = useState<Show | null>(null);
+  const [editingSeason, setEditingSeason] = useState<Season | null>(null);
+  const [editingEpisode, setEditingEpisode] = useState<Episode | null>(null);
+  const [editingReel, setEditingReel] = useState<Reel | null>(null);
 
-  const [seasonFilter, setSeasonFilter] = useState<string>("all")
-  const [episodeFilter, setEpisodeFilter] = useState<string>("all")
-  const [reelFilter, setReelFilter] = useState<string>("all")
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
-  const filteredSeasons = seasonFilter === "all" ? seasons : seasons.filter((s) => s.showId === seasonFilter)
-  const filteredEpisodes = episodeFilter === "all" ? episodes : episodes.filter((e) => e.showId === episodeFilter)
-  const filteredReels = reelFilter === "all" ? reels : reels.filter((r) => r.showId === reelFilter)
+  const [seasonFilter, setSeasonFilter] = useState<string>("all");
+  const [episodeFilter, setEpisodeFilter] = useState<string>("all");
+  const [reelFilter, setReelFilter] = useState<string>("all");
 
+  // ---- confirmation modal state ----
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState<string>("");
+  const [confirmDesc, setConfirmDesc] = useState<string>("");
+  const confirmResolveRef = useRef<((val: boolean) => void) | undefined>(undefined);
+
+  const askConfirm = (title: string, desc: string) =>
+    new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmTitle(title);
+      setConfirmDesc(desc);
+      setConfirmOpen(true);
+    });
+
+  const resolveConfirm = (val: boolean) => {
+    setConfirmOpen(false);
+    confirmResolveRef.current?.(val);
+    confirmResolveRef.current = undefined;
+  };
+
+  const showMap = useMemo(() => {
+    const m = new Map<string, Show>();
+    shows.forEach((s) => m.set(s._id, s));
+    return m;
+  }, [shows]);
+
+  const seasonMap = useMemo(() => {
+    const m = new Map<string, Season>();
+    seasons.forEach((s) => m.set(s._id, s));
+    return m;
+  }, [seasons]);
+
+  /* ------------------------------ load data ------------------------------ */
+  useEffect(() => {
+    (async () => {
+      // shows
+      const sRes = await fetch(apiList.shows.list, { credentials: "include" });
+      const sJson = await sRes.json();
+      setShows(sJson.shows || []);
+
+      // seasons
+      const seasonRes = await fetch(`${apiList.shows.seasons}`, {
+        credentials: "include",
+      });
+      const seasonJson = await seasonRes.json();
+      const seasonsWithTitle: Season[] = (seasonJson.seasons || []).map(
+        (se: Season) => ({
+          ...se,
+          showTitle: sJson.shows?.find((x: Show) => x._id === se.showId)?.title,
+        })
+      );
+      setSeasons(seasonsWithTitle);
+
+      // episodes
+      const epRes = await fetch(`${apiList.shows.episodes}`, {
+        credentials: "include",
+      });
+      const epJson = await epRes.json();
+      const episodesWithTitles: Episode[] = (epJson.episodes || []).map(
+        (e: Episode) => ({
+          ...e,
+          showTitle: sJson.shows?.find((x: Show) => x._id === e.showId)?.title,
+          seasonTitle: seasonsWithTitle.find((x) => x._id === e.seasonId)
+            ?.title,
+        })
+      );
+      setEpisodes(episodesWithTitles);
+
+      // reels
+      const rRes = await fetch(`${apiList.shows.reels}`, {
+        credentials: "include",
+      });
+      const rJson = await rRes.json();
+      const reelsWithTitle: Reel[] = (rJson.reels || []).map((r: Reel) => ({
+        ...r,
+        showTitle: sJson.shows?.find((x: Show) => x._id === r.showId)?.title,
+      }));
+      setReels(reelsWithTitle);
+    })();
+  }, []);
+
+  /* ------------------------------ filters ------------------------------ */
+  const filteredSeasons =
+    seasonFilter === "all"
+      ? seasons
+      : seasons.filter((s) => s.showId === seasonFilter);
+  const filteredEpisodes =
+    episodeFilter === "all"
+      ? episodes
+      : episodes.filter((e) => e.showId === episodeFilter);
+  const filteredReels =
+    reelFilter === "all" ? reels : reels.filter((r) => r.showId === reelFilter);
+
+  /* ------------------------------ shows CRUD ------------------------------ */
   const handleAdd = () => {
-    setEditingShow(null)
-    setIsDialogOpen(true)
-  }
+    setEditingShow(null);
+    setDialogType("show");
+    setIsDialogOpen(true);
+  };
 
   const handleEdit = (show: Show) => {
-    setEditingShow(show)
-    setIsDialogOpen(true)
-  }
+    setEditingShow(show);
+    setDialogType("show");
+    setIsDialogOpen(true);
+  };
 
-  const handleDelete = (show: Show) => {
-    if (confirm(`Are you sure you want to delete "${show.title}"?`)) {
-      setShows(shows.filter((s) => s._id !== show._id))
-    }
-  }
+  const handleDelete = async (show: Show) => {
+    const ok = await askConfirm(
+      "Delete Show",
+      `Are you sure you want to delete "${show.title}"?`
+    );
+    if (!ok) return;
 
-  const handleSave = (data: Partial<Show>) => {
-    if (editingShow) {
-      setShows(shows.map((s) => (s._id === editingShow._id ? { ...s, ...data } : s)))
+    const res = await fetch(apiList.shows.delete(show._id), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setShows((prev) => prev.filter((s) => s._id !== show._id));
+      // cascade remove client-side
+      setSeasons((prev) => prev.filter((s) => s.showId !== show._id));
+      setEpisodes((prev) => prev.filter((e) => e.showId !== show._id));
+      setReels((prev) => prev.filter((r) => r.showId !== show._id));
+      toast.success("Show deleted");
     } else {
-      setShows([...shows, { _id: Date.now().toString(), ...data } as Show])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete show");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSave = async (data: Partial<Show>) => {
+    if (editingShow) {
+      const res = await fetch(apiList.shows.update(editingShow._id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setShows((prev) =>
+          prev.map((s) => (s._id === editingShow._id ? j.show : s))
+        );
+        toast.success("Show updated");
+      } else {
+        toast.error(j.message || "Failed to update show");
+      }
+    } else {
+      const res = await fetch(apiList.shows.create, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setShows((prev) => [j.show, ...prev]);
+        toast.success("Show created");
+      } else {
+        toast.error(j.message || "Failed to create show");
+      }
+    }
+    setIsDialogOpen(false);
+  };
+
+  /* ------------------------------ seasons CRUD ------------------------------ */
   const handleAddSeason = () => {
-    setEditingSeason(null)
-    setDialogType("season")
-    setIsDialogOpen(true)
-  }
+    setEditingSeason(null);
+    setDialogType("season");
+    setIsDialogOpen(true);
+  };
 
   const handleEditSeason = (season: Season) => {
-    setEditingSeason(season)
-    setDialogType("season")
-    setIsDialogOpen(true)
-  }
+    setEditingSeason(season);
+    setDialogType("season");
+    setIsDialogOpen(true);
+  };
 
-  const handleDeleteSeason = (season: Season) => {
-    if (confirm(`Are you sure you want to delete "${season.title}"?`)) {
-      setSeasons(seasons.filter((s) => s._id !== season._id))
-    }
-  }
+  const handleDeleteSeason = async (season: Season) => {
+    const ok = await askConfirm(
+      "Delete Season",
+      `Are you sure you want to delete "${season.title}"?`
+    );
+    if (!ok) return;
 
-  const handleSaveSeason = (data: Partial<Season>) => {
-    if (editingSeason) {
-      setSeasons(seasons.map((s) => (s._id === editingSeason._id ? { ...s, ...data } : s)))
+    const res = await fetch(
+      apiList.shows.deleteSeason(season.showId, season._id),
+      {
+        method: "DELETE",
+        credentials: "include",
+      }
+    );
+    if (res.ok) {
+      setSeasons((prev) => prev.filter((s) => s._id !== season._id));
+      // also drop episodes of this season
+      setEpisodes((prev) => prev.filter((e) => e.seasonId !== season._id));
+      // refresh show's season count client-side
+      setShows((prev) =>
+        prev.map((sh) =>
+          sh._id === season.showId
+            ? { ...sh, seasons: Math.max(0, (sh.seasons || 1) - 1) }
+            : sh
+        )
+      );
+      toast.success("Season deleted");
     } else {
-      const show = shows.find((sh) => sh._id === data.showId)
-      setSeasons([...seasons, { _id: Date.now().toString(), showTitle: show?.title, ...data } as Season])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete season");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSaveSeason = async (data: Partial<Season>) => {
+    if (!data.showId) return toast.error("Show is required for a season");
+
+    if (editingSeason) {
+      const res = await fetch(
+        apiList.shows.updateSeason(editingSeason.showId, editingSeason._id),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(pick(data, ["title", "description"])),
+        }
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(j.season.showId)?.title;
+        setSeasons((prev) =>
+          prev.map((s) =>
+            s._id === editingSeason._id ? { ...j.season, showTitle } : s
+          )
+        );
+        toast.success("Season updated");
+      } else {
+        toast.error(j.message || "Failed to update season");
+      }
+    } else {
+      const res = await fetch(apiList.shows.createSeason(data.showId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(pick(data, ["title", "description"])),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(String(data.showId))?.title;
+        setSeasons((prev) => [{ ...j.season, showTitle }, ...prev]);
+        // bump season count on the show
+        const count = await fetch(
+          apiList.shows.seasonsByShow(String(data.showId)),
+          {
+            credentials: "include",
+          }
+        ).then((r) => r.json());
+        setShows((prev) =>
+          prev.map((sh) =>
+            sh._id === data.showId
+              ? { ...sh, seasons: (count.seasons || []).length }
+              : sh
+          )
+        );
+        toast.success("Season created");
+      } else {
+        toast.error(j.message || "Failed to create season");
+      }
+    }
+    setIsDialogOpen(false);
+  };
+
+  /* ------------------------------ episodes CRUD ------------------------------ */
   const handleAddEpisode = () => {
-    setEditingEpisode(null)
-    setDialogType("episode")
-    setIsDialogOpen(true)
-  }
+    setEditingEpisode(null);
+    setDialogType("episode");
+    setIsDialogOpen(true);
+  };
 
   const handleEditEpisode = (episode: Episode) => {
-    setEditingEpisode(episode)
-    setDialogType("episode")
-    setIsDialogOpen(true)
-  }
+    setEditingEpisode(episode);
+    setDialogType("episode");
+    setIsDialogOpen(true);
+  };
 
-  const handleDeleteEpisode = (episode: Episode) => {
-    if (confirm(`Are you sure you want to delete "${episode.title}"?`)) {
-      setEpisodes(episodes.filter((e) => e._id !== episode._id))
-    }
-  }
+  const handleDeleteEpisode = async (episode: Episode) => {
+    const ok = await askConfirm(
+      "Delete Episode",
+      `Are you sure you want to delete "${episode.title}"?`
+    );
+    if (!ok) return;
 
-  const handleSaveEpisode = (data: Partial<Episode>) => {
-    if (editingEpisode) {
-      setEpisodes(episodes.map((e) => (e._id === editingEpisode._id ? { ...e, ...data } : e)))
+    const res = await fetch(
+      apiList.shows.deleteEpisode(
+        episode.showId,
+        episode.seasonId,
+        episode._id
+      ),
+      { method: "DELETE", credentials: "include" }
+    );
+    if (res.ok) {
+      setEpisodes((prev) => prev.filter((e) => e._id !== episode._id));
+      toast.success("Episode deleted");
     } else {
-      const show = shows.find((sh) => sh._id === data.showId)
-      const season = seasons.find((s) => s._id === data.seasonId)
-      setEpisodes([
-        ...episodes,
-        { _id: Date.now().toString(), showTitle: show?.title, seasonTitle: season?.title, ...data } as Episode,
-      ])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete episode");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSaveEpisode = async (data: Partial<Episode>) => {
+    if (!data.showId || !data.seasonId)
+      return toast.error("Show & Season are required for an episode");
+
+    if (editingEpisode) {
+      const res = await fetch(
+        apiList.shows.updateEpisode(
+          editingEpisode.showId,
+          editingEpisode.seasonId,
+          editingEpisode._id
+        ),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(
+            pick(data, ["title", "thumbnail", "link", "featured"])
+          ),
+        }
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(j.episode.showId)?.title;
+        const seasonTitle = seasonMap.get(j.episode.seasonId)?.title;
+        setEpisodes((prev) =>
+          prev.map((e) =>
+            e._id === editingEpisode._id
+              ? { ...j.episode, showTitle, seasonTitle }
+              : e
+          )
+        );
+        toast.success("Episode updated");
+      } else {
+        toast.error(j.message || "Failed to update episode");
+      }
+    } else {
+      const res = await fetch(
+        apiList.shows.createEpisode(String(data.showId), String(data.seasonId)),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(
+            pick(data, ["title", "thumbnail", "link", "featured"])
+          ),
+        }
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(String(data.showId))?.title;
+        const seasonTitle = seasonMap.get(String(data.seasonId))?.title;
+        setEpisodes((prev) => [
+          { ...j.episode, showTitle, seasonTitle },
+          ...prev,
+        ]);
+        toast.success("Episode created");
+      } else {
+        toast.error(j.message || "Failed to create episode");
+      }
+    }
+    setIsDialogOpen(false);
+  };
+
+  /* ------------------------------ reels CRUD ------------------------------ */
   const handleAddReel = () => {
-    setEditingReel(null)
-    setDialogType("reel")
-    setIsDialogOpen(true)
-  }
+    setEditingReel(null);
+    setDialogType("reel");
+    setIsDialogOpen(true);
+  };
 
   const handleEditReel = (reel: Reel) => {
-    setEditingReel(reel)
-    setDialogType("reel")
-    setIsDialogOpen(true)
-  }
+    setEditingReel(reel);
+    setDialogType("reel");
+    setIsDialogOpen(true);
+  };
 
-  const handleDeleteReel = (reel: Reel) => {
-    if (confirm(`Are you sure you want to delete "${reel.title}"?`)) {
-      setReels(reels.filter((r) => r._id !== reel._id))
-    }
-  }
+  const handleDeleteReel = async (reel: Reel) => {
+    const ok = await askConfirm(
+      "Delete Reel",
+      `Are you sure you want to delete "${reel.title}"?`
+    );
+    if (!ok) return;
 
-  const handleSaveReel = (data: Partial<Reel>) => {
-    if (editingReel) {
-      setReels(reels.map((r) => (r._id === editingReel._id ? { ...r, ...data } : r)))
+    const res = await fetch(apiList.shows.deleteReel(reel.showId, reel._id), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setReels((prev) => prev.filter((r) => r._id !== reel._id));
+      // refresh show's reels count client-side
+      setShows((prev) =>
+        prev.map((sh) =>
+          sh._id === reel.showId
+            ? { ...sh, reels: Math.max(0, (sh.reels || 1) - 1) }
+            : sh
+        )
+      );
+      toast.success("Reel deleted");
     } else {
-      const show = shows.find((sh) => sh._id === data.showId)
-      setReels([...reels, { _id: Date.now().toString(), showTitle: show?.title, ...data } as Reel])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete reel");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSaveReel = async (data: Partial<Reel>) => {
+    if (!data.showId) return toast.error("Show is required for a reel");
+
+    if (editingReel) {
+      const res = await fetch(
+        apiList.shows.updateReel(editingReel.showId, editingReel._id),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(
+            pick(data, ["title", "description", "thumbnail", "link"])
+          ),
+        }
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(j.reel.showId)?.title;
+        setReels((prev) =>
+          prev.map((r) =>
+            r._id === editingReel._id ? { ...j.reel, showTitle } : r
+          )
+        );
+        toast.success("Reel updated");
+      } else {
+        toast.error(j.message || "Failed to update reel");
+      }
+    } else {
+      const res = await fetch(apiList.shows.createReel(String(data.showId)), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(
+          pick(data, ["title", "description", "thumbnail", "link"])
+        ),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        const showTitle = showMap.get(String(data.showId))?.title;
+        setReels((prev) => [{ ...j.reel, showTitle }, ...prev]);
+
+        // bump reels count
+        const count = await fetch(
+          apiList.shows.reelsByShow(String(data.showId)),
+          {
+            credentials: "include",
+          }
+        ).then((r) => r.json());
+        setShows((prev) =>
+          prev.map((sh) =>
+            sh._id === data.showId
+              ? { ...sh, reels: (count.reels || []).length }
+              : sh
+          )
+        );
+        toast.success("Reel created");
+      } else {
+        toast.error(j.message || "Failed to create reel");
+      }
+    }
+    setIsDialogOpen(false);
+  };
+
+  /* -------------------------------- tables -------------------------------- */
   const columns = [
     { key: "title", label: "Title" },
     {
       key: "seasons",
       label: "Seasons",
-      render: (show: Show) => show.seasons || "-",
+      render: (show: Show) => show.seasons ?? "-",
     },
     {
       key: "reels",
       label: "Reels",
-      render: (show: Show) => show.reels || "-",
+      render: (show: Show) => show.reels ?? "-",
     },
     {
       key: "featured",
       label: "Featured",
-      render: (show: Show) => (show.featured ? <Badge>Featured</Badge> : <Badge variant="outline">Regular</Badge>),
+      render: (show: Show) =>
+        show.featured ? (
+          <Badge>Featured</Badge>
+        ) : (
+          <Badge variant='outline'>Regular</Badge>
+        ),
     },
     {
       key: "description",
       label: "Description",
-      render: (show: Show) => <span className="line-clamp-1">{show.description}</span>,
+      render: (show: Show) => (
+        <span className='line-clamp-1'>{show.description}</span>
+      ),
     },
-  ]
+  ];
 
   const seasonColumns = [
     { key: "title", label: "Title" },
@@ -336,9 +609,11 @@ export default function ShowsPage() {
     {
       key: "description",
       label: "Description",
-      render: (season: Season) => <span className="line-clamp-1">{season.description}</span>,
+      render: (season: Season) => (
+        <span className='line-clamp-1'>{season.description}</span>
+      ),
     },
-  ]
+  ];
 
   const episodeColumns = [
     { key: "title", label: "Title" },
@@ -351,11 +626,11 @@ export default function ShowsPage() {
         <img
           src={episode.thumbnail || "/placeholder.svg"}
           alt={episode.title}
-          className="h-10 w-16 rounded object-cover"
+          className='h-10 w-16 rounded object-cover'
         />
       ),
     },
-  ]
+  ];
 
   const reelColumns = [
     { key: "title", label: "Title" },
@@ -364,39 +639,56 @@ export default function ShowsPage() {
       key: "thumbnail",
       label: "Thumbnail",
       render: (reel: Reel) => (
-        <img src={reel.thumbnail || "/placeholder.svg"} alt={reel.title} className="h-16 w-12 rounded object-cover" />
+        <img
+          src={reel.thumbnail || "/placeholder.svg"}
+          alt={reel.title}
+          className='h-16 w-12 rounded object-cover'
+        />
       ),
     },
     {
       key: "description",
       label: "Description",
-      render: (reel: Reel) => <span className="line-clamp-1">{reel.description}</span>,
+      render: (reel: Reel) => (
+        <span className='line-clamp-1'>{reel.description}</span>
+      ),
     },
-  ]
+  ];
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <div className="flex items-center justify-between">
-        <PageHeader title="Shows" description="Manage your shows, seasons, episodes, and reels" />
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setViewMode("table")}>
-            <List className="h-4 w-4" />
+    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+      <div className='flex items-center justify-between'>
+        <PageHeader
+          title='Shows'
+          description='Manage your shows, seasons, episodes, and reels'
+        />
+        <div className='flex items-center gap-2'>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("table")}
+          >
+            <List className='h-4 w-4' />
           </Button>
-          <Button variant="outline" size="icon" onClick={() => setViewMode("grid")}>
-            <Grid3x3 className="h-4 w-4" />
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("grid")}
+          >
+            <Grid3x3 className='h-4 w-4' />
           </Button>
         </div>
       </div>
 
-      <Tabs defaultValue="shows" className="space-y-4">
+      <Tabs defaultValue='shows' className='space-y-4'>
         <TabsList>
-          <TabsTrigger value="shows">Shows</TabsTrigger>
-          <TabsTrigger value="seasons">Seasons</TabsTrigger>
-          <TabsTrigger value="episodes">Episodes</TabsTrigger>
-          <TabsTrigger value="reels">Reels</TabsTrigger>
+          <TabsTrigger value='shows'>Shows</TabsTrigger>
+          <TabsTrigger value='seasons'>Seasons</TabsTrigger>
+          <TabsTrigger value='episodes'>Episodes</TabsTrigger>
+          <TabsTrigger value='reels'>Reels</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="shows" className="space-y-4">
+        <TabsContent value='shows' className='space-y-4'>
           {viewMode === "table" ? (
             <DataTable
               data={shows}
@@ -404,38 +696,48 @@ export default function ShowsPage() {
               onAdd={handleAdd}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              searchPlaceholder="Search shows..."
+              searchPlaceholder='Search shows...'
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
               {shows.map((show) => (
                 <Card key={show._id}>
                   <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">{show.title}</CardTitle>
+                    <div className='flex items-start justify-between'>
+                      <CardTitle className='text-lg'>{show.title}</CardTitle>
                       {show.featured && <Badge>Featured</Badge>}
                     </div>
-                    <CardDescription className="line-clamp-2">{show.description}</CardDescription>
+                    <CardDescription className='line-clamp-2'>
+                      {show.description}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className='flex items-center gap-4 text-sm text-muted-foreground'>
                       <span>{show.seasons || 0} Seasons</span>
                       <span>{show.reels || 0} Reels</span>
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(show)}>
+                    <div className='mt-4 flex gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handleEdit(show)}
+                      >
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDelete(show)}>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handleDelete(show)}
+                      >
                         Delete
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-              <Card className="flex items-center justify-center border-dashed">
-                <Button variant="ghost" onClick={handleAdd}>
-                  <Film className="mr-2 h-4 w-4" />
+              <Card className='flex items-center justify-center border-dashed'>
+                <Button variant='ghost' onClick={handleAdd}>
+                  <Film className='mr-2 h-4 w-4' />
                   Add New Show
                 </Button>
               </Card>
@@ -443,16 +745,18 @@ export default function ShowsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="seasons" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filter by show:</span>
+        <TabsContent value='seasons' className='space-y-4'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-2'>
+              <span className='text-sm text-muted-foreground'>
+                Filter by show:
+              </span>
               <Select value={seasonFilter} onValueChange={setSeasonFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="All shows" />
+                <SelectTrigger className='w-[200px]'>
+                  <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shows</SelectItem>
+                  <SelectItem value='all'>All shows</SelectItem>
                   {shows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
@@ -468,20 +772,22 @@ export default function ShowsPage() {
             onAdd={handleAddSeason}
             onEdit={handleEditSeason}
             onDelete={handleDeleteSeason}
-            searchPlaceholder="Search seasons..."
+            searchPlaceholder='Search seasons...'
           />
         </TabsContent>
 
-        <TabsContent value="episodes" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filter by show:</span>
+        <TabsContent value='episodes' className='space-y-4'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-2'>
+              <span className='text-sm text-muted-foreground'>
+                Filter by show:
+              </span>
               <Select value={episodeFilter} onValueChange={setEpisodeFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="All shows" />
+                <SelectTrigger className='w-[200px]'>
+                  <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shows</SelectItem>
+                  <SelectItem value='all'>All shows</SelectItem>
                   {shows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
@@ -497,20 +803,22 @@ export default function ShowsPage() {
             onAdd={handleAddEpisode}
             onEdit={handleEditEpisode}
             onDelete={handleDeleteEpisode}
-            searchPlaceholder="Search episodes..."
+            searchPlaceholder='Search episodes...'
           />
         </TabsContent>
 
-        <TabsContent value="reels" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filter by show:</span>
+        <TabsContent value='reels' className='space-y-4'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-2'>
+              <span className='text-sm text-muted-foreground'>
+                Filter by show:
+              </span>
               <Select value={reelFilter} onValueChange={setReelFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="All shows" />
+                <SelectTrigger className='w-[200px]'>
+                  <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shows</SelectItem>
+                  <SelectItem value='all'>All shows</SelectItem>
                   {shows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
@@ -526,51 +834,103 @@ export default function ShowsPage() {
             onAdd={handleAddReel}
             onEdit={handleEditReel}
             onDelete={handleDeleteReel}
-            searchPlaceholder="Search reels..."
+            searchPlaceholder='Search reels...'
           />
         </TabsContent>
       </Tabs>
 
+      {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className='w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden'>
+          {/* Sticky header so title stays visible while scrolling */}
+          <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
             <DialogTitle>
-              {dialogType === "show" && (editingShow ? "Edit Show" : "Add New Show")}
-              {dialogType === "season" && (editingSeason ? "Edit Season" : "Add New Season")}
-              {dialogType === "episode" && (editingEpisode ? "Edit Episode" : "Add New Episode")}
-              {dialogType === "reel" && (editingReel ? "Edit Reel" : "Add New Reel")}
+              {dialogType === "show" &&
+                (editingShow ? "Edit Show" : "Add New Show")}
+              {dialogType === "season" &&
+                (editingSeason ? "Edit Season" : "Add New Season")}
+              {dialogType === "episode" &&
+                (editingEpisode ? "Edit Episode" : "Add New Episode")}
+              {dialogType === "reel" &&
+                (editingReel ? "Edit Reel" : "Add New Reel")}
             </DialogTitle>
           </DialogHeader>
-          {dialogType === "show" && (
-            <ShowForm initialData={editingShow} onSave={handleSave} onCancel={() => setIsDialogOpen(false)} />
-          )}
-          {dialogType === "season" && (
-            <SeasonForm
-              initialData={editingSeason}
-              shows={shows}
-              onSave={handleSaveSeason}
-              onCancel={() => setIsDialogOpen(false)}
-            />
-          )}
-          {dialogType === "episode" && (
-            <EpisodeForm
-              initialData={editingEpisode}
-              shows={shows}
-              seasons={seasons}
-              onSave={handleSaveEpisode}
-              onCancel={() => setIsDialogOpen(false)}
-            />
-          )}
-          {dialogType === "reel" && (
-            <ReelForm
-              initialData={editingReel}
-              shows={shows}
-              onSave={handleSaveReel}
-              onCancel={() => setIsDialogOpen(false)}
-            />
-          )}
+
+          {/* Scrollable content area */}
+          <div className='overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]'>
+            {dialogType === "show" && (
+              <ShowForm
+                initialData={editingShow}
+                onSave={handleSave}
+                onCancel={() => setIsDialogOpen(false)}
+              />
+            )}
+
+            {dialogType === "season" && (
+              <SeasonForm
+                initialData={editingSeason}
+                shows={shows}
+                onSave={handleSaveSeason}
+                onCancel={() => setIsDialogOpen(false)}
+              />
+            )}
+
+            {dialogType === "episode" && (
+              <EpisodeForm
+                initialData={editingEpisode}
+                shows={shows}
+                seasons={seasons}
+                onSave={handleSaveEpisode}
+                onCancel={() => setIsDialogOpen(false)}
+              />
+            )}
+
+            {dialogType === "reel" && (
+              <ReelForm
+                initialData={editingReel}
+                shows={shows}
+                onSave={handleSaveReel}
+                onCancel={() => setIsDialogOpen(false)}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!open) resolveConfirm(false);
+        }}
+      >
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>{confirmTitle}</DialogTitle>
+          </DialogHeader>
+          <p className='text-sm text-muted-foreground'>{confirmDesc}</p>
+          <div className='mt-6 flex justify-end gap-2'>
+            <Button variant='outline' onClick={() => resolveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant='destructive' onClick={() => resolveConfirm(true)}>
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
+}
+
+/* tiny helper */
+function pick<T extends object, K extends keyof T>(
+  obj: Partial<T>,
+  keys: K[]
+): Partial<T> {
+  const out: Partial<T> = {};
+  keys.forEach((k) => {
+    if (obj[k] !== undefined) (out as any)[k] = obj[k];
+  });
+  return out;
 }
