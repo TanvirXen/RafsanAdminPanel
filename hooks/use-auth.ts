@@ -1,44 +1,75 @@
-"use client"
+// hooks/use-auth.ts
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import apiList from "@/apiList";
 
-interface AuthUser {
-  email: string
-  timestamp: number
-}
+export type SafeUser = {
+  id: string;
+  email: string;
+  name?: string;
+  role: "admin" | "editor";
+};
 
-export function useAuth() {
-  const router = useRouter()
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function useAuth(options: { redirectOnUnauthed?: boolean } = { redirectOnUnauthed: true }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<SafeUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchMe = useCallback(
+    async (signal?: AbortSignal) => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(apiList.auth.me, {
+          credentials: "include",
+          cache: "no-store",
+          signal,
+        });
+        if (!res.ok) throw new Error("unauthorized");
+        const data = await res.json();
+        if (signal?.aborted) return;
+
+        setUser(data.user as SafeUser);
+        // optional client flags for UI
+        localStorage.setItem("isAuthenticated", "true");
+        localStorage.setItem("adminUser", JSON.stringify(data.user));
+      } catch {
+        if (signal?.aborted) return;
+        setUser(null);
+        localStorage.removeItem("isAuthenticated");
+        localStorage.removeItem("adminUser");
+        if (options.redirectOnUnauthed && pathname?.startsWith("/admin")) {
+          router.replace("/login");
+        }
+      } finally {
+        if (!signal?.aborted) setIsLoading(false);
+      }
+    },
+    [router, pathname, options.redirectOnUnauthed]
+  );
 
   useEffect(() => {
-    // Check if user is logged in
-    const isAuthenticated = localStorage.getItem("isAuthenticated")
-    const storedAuth = localStorage.getItem("adminToken")
+    const ctrl = new AbortController();
+    fetchMe(ctrl.signal);
+    return () => ctrl.abort();
+  }, [fetchMe]);
 
-    if (isAuthenticated && storedAuth) {
-      try {
-        const auth = JSON.parse(storedAuth)
-        setUser(auth)
-      } catch {
-        localStorage.removeItem("adminToken")
-        localStorage.removeItem("isAuthenticated")
-        router.push("/login")
-      }
-    } else {
-      router.push("/login")
+  const logout = useCallback(async () => {
+    try {
+      await fetch(apiList.auth.logout, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // ignore network errors; still clear client state
     }
-    setIsLoading(false)
-  }, [router])
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("adminUser");
+    setUser(null);
+    router.replace("/login");
+  }, [router]);
 
-  const logout = () => {
-    localStorage.removeItem("adminToken")
-    localStorage.removeItem("isAuthenticated")
-    setUser(null)
-    router.push("/login")
-  }
-
-  return { user, isLoading, logout }
+  return { user, isLoading, logout, refetch: () => fetchMe() };
 }

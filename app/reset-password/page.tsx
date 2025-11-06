@@ -1,121 +1,153 @@
-"use client"
+// app/reset-password/page.tsx
+"use client";
 
-import type React from "react"
+import type React from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AlertCircle, CheckCircle, Mail, ArrowLeft, Lock } from "lucide-react";
+import Link from "next/link";
+import apiList from "@/apiList";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, CheckCircle, Mail, ArrowLeft, Lock } from "lucide-react"
-import Link from "next/link"
-
-type ResetStep = "email" | "otp" | "password" | "success"
+type ResetStep = "email" | "otp" | "password" | "success";
 
 export default function ResetPasswordPage() {
-  const router = useRouter()
-  const [step, setStep] = useState<ResetStep>("email")
-  const [email, setEmail] = useState("")
-  const [otp, setOtp] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [generatedOtp, setGeneratedOtp] = useState("")
-  const [otpTimer, setOtpTimer] = useState(0)
+  const router = useRouter();
+  const [step, setStep] = useState<ResetStep>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
 
-  // Generate a mock OTP
-  const generateOtp = () => {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString()
-    setGeneratedOtp(otp)
-    setOtpTimer(300) // 5 minutes
-    console.log("[v0] Generated OTP:", otp) // For demo purposes
-  }
+  // start/maintain countdown
+  useEffect(() => {
+    if (otpTimer <= 0) return;
+    const id = setInterval(() => setOtpTimer((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => clearInterval(id);
+  }, [otpTimer]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setIsLoading(true)
-
-    if (!email) {
-      setError("Please enter your email address")
-      setIsLoading(false)
-      return
-    }
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
     try {
-      // Simulate API call to send OTP
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      generateOtp()
-      setStep("otp")
-    } catch (err) {
-      setError("Failed to send OTP. Please try again.")
+      const res = await fetch(apiList.auth.reset.request, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      if (!res.ok) {
+        let msg = "Failed to send OTP.";
+        try {
+          const d = await res.json();
+          if (d?.message) msg = d.message;
+        } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json(); // { message, expiresIn, (demoCode?) }
+      setOtpTimer(Number(data?.expiresIn || 300));
+      if (data?.demoCode) {
+        // dev convenience
+        // eslint-disable-next-line no-console
+        console.log("[dev] OTP =", data.demoCode);
+      }
+      setStep("otp");
+    } catch (err: any) {
+      setError(err?.message || "Failed to send OTP. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false)
-  }
+  };
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setIsLoading(true)
-
-    if (!otp) {
-      setError("Please enter the OTP")
-      setIsLoading(false)
-      return
-    }
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
     try {
-      // Simulate API call to verify OTP
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      if (otp === generatedOtp) {
-        setStep("password")
-      } else {
-        setError("Invalid OTP. Please try again.")
+      const res = await fetch(apiList.auth.reset.verify, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: otp.trim(),
+        }),
+      });
+      if (!res.ok) {
+        let msg = "Invalid or expired OTP.";
+        try {
+          const d = await res.json();
+          if (d?.message) msg = d.message;
+        } catch {}
+        throw new Error(msg);
       }
-    } catch (err) {
-      setError("Failed to verify OTP. Please try again.")
+      setStep("password");
+    } catch (err: any) {
+      setError(err?.message || "Failed to verify OTP. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false)
-  }
+  };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setIsLoading(true)
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
     if (!newPassword || !confirmPassword) {
-      setError("Please enter both password fields")
-      setIsLoading(false)
-      return
+      setError("Please enter both password fields");
+      setIsLoading(false);
+      return;
     }
-
     if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters long")
-      setIsLoading(false)
-      return
+      setError("Password must be at least 8 characters long");
+      setIsLoading(false);
+      return;
     }
-
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
-      return
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
     }
 
     try {
-      // Simulate API call to reset password
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setStep("success")
-    } catch (err) {
-      setError("Failed to reset password. Please try again.")
+      const res = await fetch(apiList.auth.reset.confirm, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: otp.trim(),
+          newPassword,
+        }),
+      });
+      if (!res.ok) {
+        let msg = "Failed to reset password.";
+        try {
+          const d = await res.json();
+          if (d?.message) msg = d.message;
+        } catch {}
+        throw new Error(msg);
+      }
+      setStep("success");
+    } catch (err: any) {
+      setError(err?.message || "Failed to reset password. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false)
-  }
+  };
 
   if (step === "success") {
     return (
@@ -136,7 +168,7 @@ export default function ResetPasswordPage() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -155,7 +187,7 @@ export default function ResetPasswordPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Step 1: Email */}
+          {/* Email */}
           {step === "email" && (
             <form onSubmit={handleEmailSubmit} className="space-y-6">
               {error && (
@@ -164,7 +196,6 @@ export default function ResetPasswordPage() {
                   {error}
                 </div>
               )}
-
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
                 <div className="relative">
@@ -180,14 +211,13 @@ export default function ResetPasswordPage() {
                   />
                 </div>
               </div>
-
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Sending OTP..." : "Send OTP"}
               </Button>
             </form>
           )}
 
-          {/* Step 2: OTP Verification */}
+          {/* OTP */}
           {step === "otp" && (
             <form onSubmit={handleOtpSubmit} className="space-y-6">
               {error && (
@@ -196,7 +226,6 @@ export default function ResetPasswordPage() {
                   {error}
                 </div>
               )}
-
               <div className="space-y-2">
                 <Label htmlFor="otp">Enter OTP</Label>
                 <Input
@@ -204,30 +233,32 @@ export default function ResetPasswordPage() {
                   type="text"
                   placeholder="000000"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onChange={(e) =>
+                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
                   maxLength={6}
                   className="text-center text-2xl tracking-widest"
                   required
                 />
                 <p className="text-xs text-muted-foreground">
                   {otpTimer > 0
-                    ? `OTP expires in ${Math.floor(otpTimer / 60)}:${(otpTimer % 60).toString().padStart(2, "0")}`
+                    ? `OTP expires in ${Math.floor(otpTimer / 60)}:${(otpTimer % 60)
+                        .toString()
+                        .padStart(2, "0")}`
                     : "OTP expired"}
                 </p>
               </div>
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading || otpTimer <= 0}>
                 {isLoading ? "Verifying..." : "Verify OTP"}
               </Button>
-
               <Button
                 type="button"
                 variant="outline"
                 className="w-full bg-transparent"
                 onClick={() => {
-                  setStep("email")
-                  setOtp("")
-                  setError("")
+                  setStep("email");
+                  setOtp("");
+                  setError("");
                 }}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -236,7 +267,7 @@ export default function ResetPasswordPage() {
             </form>
           )}
 
-          {/* Step 3: New Password */}
+          {/* New Password */}
           {step === "password" && (
             <form onSubmit={handlePasswordSubmit} className="space-y-6">
               {error && (
@@ -245,7 +276,6 @@ export default function ResetPasswordPage() {
                   {error}
                 </div>
               )}
-
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
                 <div className="relative">
@@ -262,7 +292,6 @@ export default function ResetPasswordPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <div className="relative">
@@ -278,20 +307,18 @@ export default function ResetPasswordPage() {
                   />
                 </div>
               </div>
-
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Resetting..." : "Reset Password"}
               </Button>
-
               <Button
                 type="button"
                 variant="outline"
                 className="w-full bg-transparent"
                 onClick={() => {
-                  setStep("otp")
-                  setNewPassword("")
-                  setConfirmPassword("")
-                  setError("")
+                  setStep("otp");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                  setError("");
                 }}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -300,7 +327,7 @@ export default function ResetPasswordPage() {
             </form>
           )}
 
-          <div className="mt-4">
+          {/* <div className="mt-4">
             <Link
               href="/login"
               className="flex items-center justify-center gap-2 text-sm text-blue-600 hover:underline"
@@ -308,9 +335,9 @@ export default function ResetPasswordPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to Login
             </Link>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
