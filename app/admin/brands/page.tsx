@@ -1,93 +1,164 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { PageHeader } from "@/components/admin/page-header"
-import { DataTable } from "@/components/admin/data-table"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { BrandForm } from "@/components/admin/forms/brand-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ExternalLink, ImageIcon } from "lucide-react"
-import Image from "next/image"
+import { useEffect, useMemo, useRef, useState } from "react";
+import apiList from "@/apiList";
+
+import { PageHeader } from "@/components/admin/page-header";
+import { DataTable } from "@/components/admin/data-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { BrandForm } from "@/components/admin/forms/brand-form";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ExternalLink, ImageIcon, List, Grid3x3 } from "lucide-react";
+import Image from "next/image";
+import { toast } from "react-toastify";
 
 interface Brand {
-  _id: string
-  brandName: string
-  imageLink: string
-  externalLink: string
+  _id: string;
+  brandName: string;
+  imageLink: string;
+  externalLink: string;
 }
 
-const mockBrands: Brand[] = [
-  {
-    _id: "1",
-    brandName: "TechCorp",
-    imageLink: "/techcorp-logo.png",
-    externalLink: "https://techcorp.example.com",
-  },
-  {
-    _id: "2",
-    brandName: "InnovateLabs",
-    imageLink: "/innovatelabs-logo.png",
-    externalLink: "https://innovatelabs.example.com",
-  },
-  {
-    _id: "3",
-    brandName: "DevTools Inc",
-    imageLink: "/devtools-logo.jpg",
-    externalLink: "https://devtools.example.com",
-  },
-  {
-    _id: "4",
-    brandName: "CloudSystems",
-    imageLink: "/cloudsystems-logo.jpg",
-    externalLink: "https://cloudsystems.example.com",
-  },
-]
-
 export default function BrandsPage() {
-  const [brands, setBrands] = useState<Brand[]>(mockBrands)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingBrand, setEditingBrand] = useState<Brand | null>(null)
-  const [viewMode, setViewMode] = useState<"table" | "grid">("grid")
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "grid">("grid");
 
+  // confirm dialog state (no window.alert)
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState("");
+  const [confirmDesc, setConfirmDesc] = useState("");
+  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(
+    undefined
+  );
+
+  const askConfirm = (title: string, desc: string) =>
+    new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmTitle(title);
+      setConfirmDesc(desc);
+      setConfirmOpen(true);
+    });
+  const resolveConfirm = (v: boolean) => {
+    setConfirmOpen(false);
+    confirmResolveRef.current?.(v);
+    confirmResolveRef.current = undefined;
+  };
+
+  /* load */
+  useEffect(() => {
+    (async () => {
+      const res = await fetch(apiList.brands.list, { credentials: "include" });
+      const j = await res.json();
+      setBrands(j.brands || []);
+    })();
+  }, []);
+
+  /* CRUD */
   const handleAdd = () => {
-    setEditingBrand(null)
-    setIsDialogOpen(true)
-  }
+    setEditingBrand(null);
+    setIsDialogOpen(true);
+  };
 
   const handleEdit = (brand: Brand) => {
-    setEditingBrand(brand)
-    setIsDialogOpen(true)
-  }
+    setEditingBrand(brand);
+    setIsDialogOpen(true);
+  };
 
-  const handleDelete = (brand: Brand) => {
-    if (confirm(`Are you sure you want to delete "${brand.brandName}"?`)) {
-      setBrands(brands.filter((b) => b._id !== brand._id))
-    }
-  }
+  const handleDelete = async (brand: Brand) => {
+    const ok = await askConfirm(
+      "Delete Brand",
+      `Are you sure you want to delete "${brand.brandName}"?`
+    );
+    if (!ok) return;
 
-  const handleSave = (data: Partial<Brand>) => {
-    if (editingBrand) {
-      setBrands(brands.map((b) => (b._id === editingBrand._id ? { ...b, ...data } : b)))
+    const res = await fetch(apiList.brands.delete(brand._id), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setBrands((prev) => prev.filter((b) => b._id !== brand._id));
+      toast.success("Brand deleted");
     } else {
-      setBrands([...brands, { _id: Date.now().toString(), ...data } as Brand])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete brand");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSave = async (data: Partial<Brand>) => {
+    if (editingBrand) {
+      // update (PUT)
+      const res = await fetch(apiList.brands.update(editingBrand._id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setBrands((prev) =>
+          prev.map((b) => (b._id === editingBrand._id ? j.brand : b))
+        );
+        toast.success("Brand updated");
+      } else {
+        toast.error(j.message || "Failed to update brand");
+      }
+    } else {
+      // create
+      const res = await fetch(apiList.brands.create, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setBrands((prev) => [j.brand, ...prev]);
+        toast.success("Brand created");
+      } else {
+        toast.error(j.message || "Failed to create brand");
+      }
+    }
+    setIsDialogOpen(false);
+  };
+
+  /* table columns */
   const columns = [
     {
       key: "brandName",
       label: "Brand Name",
-      render: (brand: Brand) => <span className="font-medium">{brand.brandName}</span>,
+      render: (brand: Brand) => (
+        <span className='font-medium'>{brand.brandName}</span>
+      ),
     },
     {
       key: "imageLink",
       label: "Logo",
       render: (brand: Brand) => (
-        <div className="flex items-center gap-2">
-          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Logo attached</span>
+        <div className='flex items-center gap-2'>
+          <ImageIcon className='h-4 w-4 text-muted-foreground' />
+          <span className='text-xs text-muted-foreground'>Logo attached</span>
         </div>
       ),
     },
@@ -97,27 +168,38 @@ export default function BrandsPage() {
       render: (brand: Brand) => (
         <a
           href={brand.externalLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          target='_blank'
+          rel='noopener noreferrer'
+          className='flex items-center gap-1 text-sm text-blue-600 hover:underline'
         >
-          <ExternalLink className="h-3 w-3" />
+          <ExternalLink className='h-3 w-3' />
           Visit
         </a>
       ),
     },
-  ]
+  ];
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <div className="flex items-center justify-between">
-        <PageHeader title="Brands" description="Manage partner brands and sponsors" />
-        <div className="flex items-center gap-2">
-          <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setViewMode("table")}>
-            Table
+    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+      <div className='flex items-center justify-between'>
+        <PageHeader
+          title='Brands'
+          description='Manage partner brands and sponsors'
+        />
+        <div className='flex items-center gap-2'>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("table")}
+          >
+            <List className='h-4 w-4' />
           </Button>
-          <Button variant={viewMode === "grid" ? "default" : "outline"} size="sm" onClick={() => setViewMode("grid")}>
-            Grid
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("grid")}
+          >
+            <Grid3x3 className='h-4 w-4' />
           </Button>
         </div>
       </div>
@@ -129,44 +211,54 @@ export default function BrandsPage() {
           onAdd={handleAdd}
           onEdit={handleEdit}
           onDelete={handleDelete}
-          searchPlaceholder="Search brands..."
+          searchPlaceholder='Search brands...'
         />
       ) : (
-        <div className="space-y-4">
-          <div className="flex justify-end">
+        <div className='space-y-4'>
+          <div className='flex justify-end'>
             <Button onClick={handleAdd}>Add New Brand</Button>
           </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {brands.map((brand) => (
-              <Card key={brand._id} className="overflow-hidden">
-                <CardHeader className="p-0">
-                  <div className="relative aspect-video w-full bg-muted">
+              <Card key={brand._id} className='overflow-hidden'>
+                <CardHeader className='p-0'>
+                  <div className='relative aspect-video w-full bg-muted'>
                     <Image
                       src={brand.imageLink || "/placeholder.svg"}
                       alt={brand.brandName}
                       fill
-                      className="object-contain p-4"
+                      className='object-contain p-4'
                     />
                   </div>
                 </CardHeader>
-                <CardContent className="p-4">
-                  <CardTitle className="text-lg">{brand.brandName}</CardTitle>
-                  <CardDescription className="mt-2">
+                <CardContent className='p-4'>
+                  <CardTitle className='text-lg'>{brand.brandName}</CardTitle>
+                  <CardDescription className='mt-2'>
                     <a
                       href={brand.externalLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='flex items-center gap-1 text-sm text-blue-600 hover:underline'
                     >
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className='h-3 w-3' />
                       Visit Website
                     </a>
                   </CardDescription>
-                  <div className="mt-4 flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(brand)} className="flex-1">
+                  <div className='mt-4 flex gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => handleEdit(brand)}
+                      className='flex-1'
+                    >
                       Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDelete(brand)} className="flex-1">
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => handleDelete(brand)}
+                      className='flex-1'
+                    >
                       Delete
                     </Button>
                   </div>
@@ -177,14 +269,46 @@ export default function BrandsPage() {
         </div>
       )}
 
+      {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingBrand ? "Edit Brand" : "Add New Brand"}</DialogTitle>
+        <DialogContent className='w-[95vw] sm:max-w-md max-h-[85vh] p-0 overflow-hidden'>
+          <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
+            <DialogTitle>
+              {editingBrand ? "Edit Brand" : "Add New Brand"}
+            </DialogTitle>
           </DialogHeader>
-          <BrandForm initialData={editingBrand} onSave={handleSave} onCancel={() => setIsDialogOpen(false)} />
+          <div className='overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]'>
+            <BrandForm
+              initialData={editingBrand || undefined}
+              onSave={handleSave}
+              onCancel={() => setIsDialogOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!open) resolveConfirm(false);
+        }}
+      >
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>{confirmTitle}</DialogTitle>
+          </DialogHeader>
+          <p className='text-sm text-muted-foreground'>{confirmDesc}</p>
+          <div className='mt-6 flex justify-end gap-2'>
+            <Button variant='outline' onClick={() => resolveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant='destructive' onClick={() => resolveConfirm(true)}>
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
