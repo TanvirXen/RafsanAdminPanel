@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,18 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ImageUpload } from "@/components/admin/image-upload"
 import { Plus, X, GripVertical } from "lucide-react"
 
-interface EventFormProps {
-  initialData?: any
-  onSave: (data: any) => void
-  onCancel: () => void
-}
+type EventType = "Free" | "Free_with_approval" | "Paid" | "Paid_with_approval"
 
-const availableBrands = [
-  { _id: "1", brandName: "TechCorp" },
-  { _id: "2", brandName: "InnovateLabs" },
-  { _id: "3", brandName: "DevTools Inc" },
-  { _id: "4", brandName: "CloudSystems" },
-]
+type Brand = { _id: string; brandName: string; imageLink?: string }
 
 interface CustomField {
   id: string
@@ -35,106 +25,153 @@ interface CustomField {
   options?: string[]
 }
 
-export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
+interface EventFormProps {
+  initialData?: {
+    title?: string
+    date?: string[]
+    venue?: string
+    type?: EventType
+    description?: string
+    imageLinkBg?: string
+    imageLinkOverlay?: string
+    // may be IDs, populated objects, or legacy brand names
+    brands?: Array<string | { _id: string; brandName?: string }>
+    customFields?: CustomField[]
+    category?: string
+  }
+  brands?: Brand[]                         // <-- pass from API
+  onBrandsChange?: (ids: string[]) => void // optional live callback for parent
+  onSave: (data: any) => void
+  onCancel: () => void
+}
+
+export function EventForm({
+  initialData,
+  brands = [],
+  onBrandsChange,
+  onSave,
+  onCancel,
+}: EventFormProps) {
+  // --------- normalize initial brand ids (IDs, objects, or names) ----------
+  const initialBrandIds = useMemo<string[]>(() => {
+    const all = initialData?.brands ?? []
+    if (!all.length) return []
+    const byName = new Map(brands.map((b) => [b.brandName, b._id]))
+    const ids = all
+      .map((b) => {
+        if (!b) return null
+        if (typeof b === "string") {
+          // if string matches a known id, use it; otherwise try name->id
+          const byId = brands.find((x) => x._id === b)?._id
+          return byId ?? byName.get(b) ?? null
+        }
+        // populated object
+        return b._id ?? byName.get((b as any).brandName || "") ?? null
+      })
+      .filter(Boolean) as string[]
+    // de-dupe
+    return Array.from(new Set(ids))
+  }, [initialData?.brands, brands])
+
+  // ---------------------------- form state ----------------------------
   const [formData, setFormData] = useState({
     title: initialData?.title || "",
-    date: initialData?.date || [""],
+    date: initialData?.date?.length ? initialData.date : [""],
     venue: initialData?.venue || "",
-    type: initialData?.type || "Free",
+    type: (initialData?.type as EventType) || "Free",
     description: initialData?.description || "",
     imageLinkBg: initialData?.imageLinkBg || "",
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
-    brands: initialData?.brands || [],
-    customFields: initialData?.customFields || [],
-    category: initialData?.category || "event", // Added category field
+    brands: initialBrandIds, // <-- IDs only in local state
+    customFields: (initialData?.customFields as CustomField[]) || [],
+    category: initialData?.category || "event",
   })
 
+  // keep brand selection in sync if brands/initialData arrive later
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, brands: initialBrandIds }))
+  }, [initialBrandIds])
+
+  // bubble brand changes up so the parent can render chips if desired
+  useEffect(() => {
+    onBrandsChange?.(formData.brands)
+  }, [formData.brands, onBrandsChange])
+
+  // ---------------------------- handlers ----------------------------
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(formData)
   }
 
-  const addDate = () => {
-    setFormData({ ...formData, date: [...formData.date, ""] })
-  }
+  const addDate = () => setFormData((p) => ({ ...p, date: [...p.date, ""] }))
+  const removeDate = (i: number) =>
+    setFormData((p) => ({ ...p, date: p.date.filter((_, idx) => idx !== i) }))
+  const updateDate = (i: number, v: string) =>
+    setFormData((p) => {
+      const d = [...p.date]
+      d[i] = v
+      return { ...p, date: d }
+    })
 
-  const removeDate = (index: number) => {
-    setFormData({ ...formData, date: formData.date.filter((_, i) => i !== index) })
-  }
-
-  const updateDate = (index: number, value: string) => {
-    const newDates = [...formData.date]
-    newDates[index] = value
-    setFormData({ ...formData, date: newDates })
-  }
-
-  const toggleBrand = (brandName: string) => {
-    const brands = formData.brands.includes(brandName)
-      ? formData.brands.filter((b: string) => b !== brandName)
-      : [...formData.brands, brandName]
-    setFormData({ ...formData, brands })
-  }
-
-  const addCustomField = () => {
-    const newField: CustomField = {
-      id: Date.now().toString(),
-      name: "",
-      type: "text",
-      label: "",
-      required: false,
-    }
-    setFormData({ ...formData, customFields: [...formData.customFields, newField] })
-  }
-
-  const removeCustomField = (id: string) => {
-    setFormData({
-      ...formData,
-      customFields: formData.customFields.filter((f: CustomField) => f.id !== id),
+  const toggleBrand = (brandId: string, checked?: boolean) => {
+    setFormData((p) => {
+      const has = p.brands.includes(brandId)
+      let next: string[]
+      if (checked === undefined) {
+        next = has ? p.brands.filter((id) => id !== brandId) : [...p.brands, brandId]
+      } else {
+        next = checked ? (has ? p.brands : [...p.brands, brandId]) : p.brands.filter((id) => id !== brandId)
+      }
+      // de-dupe just in case
+      next = Array.from(new Set(next))
+      return { ...p, brands: next }
     })
   }
 
-  const updateCustomField = (id: string, updates: Partial<CustomField>) => {
-    setFormData({
-      ...formData,
-      customFields: formData.customFields.map((f: CustomField) => (f.id === id ? { ...f, ...updates } : f)),
-    })
-  }
+  const addCustomField = () =>
+    setFormData((p) => ({
+      ...p,
+      customFields: [
+        ...p.customFields,
+        { id: Date.now().toString(), name: "", type: "text", label: "", required: false } as CustomField,
+      ],
+    }))
 
-  const addFieldOption = (fieldId: string) => {
-    setFormData({
-      ...formData,
-      customFields: formData.customFields.map((f: CustomField) =>
-        f.id === fieldId ? { ...f, options: [...(f.options || []), ""] } : f,
+  const removeCustomField = (id: string) =>
+    setFormData((p) => ({ ...p, customFields: p.customFields.filter((f) => f.id !== id) }))
+
+  const updateCustomField = (id: string, updates: Partial<CustomField>) =>
+    setFormData((p) => ({
+      ...p,
+      customFields: p.customFields.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+    }))
+
+  const addFieldOption = (fieldId: string) =>
+    setFormData((p) => ({
+      ...p,
+      customFields: p.customFields.map((f) => (f.id === fieldId ? { ...f, options: [...(f.options || []), ""] } : f)),
+    }))
+
+  const updateFieldOption = (fieldId: string, optionIndex: number, value: string) =>
+    setFormData((p) => ({
+      ...p,
+      customFields: p.customFields.map((f) => {
+        if (f.id !== fieldId) return f
+        const opts = [...(f.options || [])]
+        opts[optionIndex] = value
+        return { ...f, options: opts }
+      }),
+    }))
+
+  const removeFieldOption = (fieldId: string, optionIndex: number) =>
+    setFormData((p) => ({
+      ...p,
+      customFields: p.customFields.map((f) =>
+        f.id === fieldId ? { ...f, options: (f.options || []).filter((_, i) => i !== optionIndex) } : f
       ),
-    })
-  }
+    }))
 
-  const updateFieldOption = (fieldId: string, optionIndex: number, value: string) => {
-    setFormData({
-      ...formData,
-      customFields: formData.customFields.map((f: CustomField) => {
-        if (f.id === fieldId && f.options) {
-          const newOptions = [...f.options]
-          newOptions[optionIndex] = value
-          return { ...f, options: newOptions }
-        }
-        return f
-      }),
-    })
-  }
-
-  const removeFieldOption = (fieldId: string, optionIndex: number) => {
-    setFormData({
-      ...formData,
-      customFields: formData.customFields.map((f: CustomField) => {
-        if (f.id === fieldId && f.options) {
-          return { ...f, options: f.options.filter((_, i) => i !== optionIndex) }
-        }
-        return f
-      }),
-    })
-  }
-
+  // ---------------------------- UI ----------------------------
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
@@ -178,7 +215,7 @@ export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="type">Event Type</Label>
-          <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
+          <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as EventType })}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -234,6 +271,7 @@ export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
         />
       </div>
 
+      {/* Associated brands from API (IDs) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Associated Brands</CardTitle>
@@ -241,25 +279,29 @@ export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
-            {availableBrands.map((brand) => (
-              <div key={brand._id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`brand-${brand._id}`}
-                  checked={formData.brands.includes(brand.brandName)}
-                  onCheckedChange={() => toggleBrand(brand.brandName)}
-                />
-                <label
-                  htmlFor={`brand-${brand._id}`}
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  {brand.brandName}
-                </label>
-              </div>
-            ))}
+            {brands.map((brand) => {
+              const checked = formData.brands.includes(brand._id)
+              return (
+                <div key={brand._id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`brand-${brand._id}`}
+                    checked={checked}
+                    onCheckedChange={(c) => toggleBrand(brand._id, Boolean(c))}
+                  />
+                  <label
+                    htmlFor={`brand-${brand._id}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {brand.brandName}
+                  </label>
+                </div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>
 
+      {/* Registration Form Fields */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Registration Form Fields</CardTitle>
@@ -333,7 +375,7 @@ export function EventForm({ initialData, onSave, onCancel }: EventFormProps) {
                       <Checkbox
                         id={`required-${field.id}`}
                         checked={field.required}
-                        onCheckedChange={(checked) => updateCustomField(field.id, { required: checked as boolean })}
+                        onCheckedChange={(c) => updateCustomField(field.id, { required: Boolean(c) })}
                       />
                       <label htmlFor={`required-${field.id}`} className="text-sm font-medium leading-none">
                         Required field

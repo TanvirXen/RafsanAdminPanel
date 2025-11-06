@@ -1,79 +1,140 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { PageHeader } from "@/components/admin/page-header"
-import { DataTable } from "@/components/admin/data-table"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { NotableEventForm } from "@/components/admin/forms/notable-event-form"
-import { Calendar, Star } from "lucide-react"
+import { useEffect, useRef, useState } from "react";
+import apiList from "@/apiList";
+
+import { PageHeader } from "@/components/admin/page-header";
+import { DataTable } from "@/components/admin/data-table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { NotableEventForm } from "@/components/admin/forms/notable-event-form";
+import { Calendar, Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "react-toastify";
 
 interface NotableEvent {
-  _id: string
-  date: string
-  imageLink: string
-  description: string
-  title: string
-  featured: boolean
+  _id: string;
+  date: string;          // ISO or yyyy-mm-dd
+  imageLink: string;
+  description: string;
+  title: string;
+  featured: boolean;
 }
 
-const mockNotableEvents: NotableEvent[] = [
-  {
-    _id: "1",
-    date: "2025-02-14",
-    imageLink: "/placeholder.svg?height=200&width=400",
-    title: "Product Launch Event",
-    description: "Successfully launched our flagship product with over 500 attendees",
-    featured: true,
-  },
-  {
-    _id: "2",
-    date: "2025-04-22",
-    imageLink: "/placeholder.svg?height=200&width=400",
-    title: "Industry Award Win",
-    description: "Received Best Innovation Award at Tech Summit 2025",
-    featured: true,
-  },
-  {
-    _id: "3",
-    date: "2025-07-01",
-    imageLink: "/placeholder.svg?height=200&width=400",
-    title: "Partnership Announcement",
-    description: "Strategic partnership with leading tech companies",
-    featured: false,
-  },
-]
-
 export default function NotableEventsPage() {
-  const [events, setEvents] = useState<NotableEvent[]>(mockNotableEvents)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingEvent, setEditingEvent] = useState<NotableEvent | null>(null)
+  const [events, setEvents] = useState<NotableEvent[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<NotableEvent | null>(null);
 
+  // --- confirmation modal (promise-based, no alert) ---
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState("");
+  const [confirmDesc, setConfirmDesc] = useState("");
+  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(undefined);
+
+  const askConfirm = (title: string, desc: string) =>
+    new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmTitle(title);
+      setConfirmDesc(desc);
+      setConfirmOpen(true);
+    });
+
+  const resolveConfirm = (v: boolean) => {
+    setConfirmOpen(false);
+    confirmResolveRef.current?.(v);
+    confirmResolveRef.current = undefined;
+  };
+
+  // --- load ---
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(apiList.notableEvents.list, { credentials: "include" });
+        const j = await res.json();
+        setEvents(j.events || []);
+      } catch {
+        toast.error("Failed to load notable events");
+      }
+    })();
+  }, []);
+
+  // --- CRUD handlers ---
   const handleAdd = () => {
-    setEditingEvent(null)
-    setIsDialogOpen(true)
-  }
+    setEditingEvent(null);
+    setIsDialogOpen(true);
+  };
 
   const handleEdit = (event: NotableEvent) => {
-    setEditingEvent(event)
-    setIsDialogOpen(true)
-  }
+    setEditingEvent(event);
+    setIsDialogOpen(true);
+  };
 
-  const handleDelete = (event: NotableEvent) => {
-    if (confirm(`Are you sure you want to delete "${event.title}"?`)) {
-      setEvents(events.filter((e) => e._id !== event._id))
-    }
-  }
+  const handleDelete = async (event: NotableEvent) => {
+    const ok = await askConfirm("Delete Notable Event", `Are you sure you want to delete "${event.title}"?`);
+    if (!ok) return;
 
-  const handleSave = (data: Partial<NotableEvent>) => {
-    if (editingEvent) {
-      setEvents(events.map((e) => (e._id === editingEvent._id ? { ...e, ...data } : e)))
+    const res = await fetch(apiList.notableEvents.delete(event._id), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setEvents((prev) => prev.filter((e) => e._id !== event._id));
+      toast.success("Notable event deleted");
     } else {
-      setEvents([...events, { _id: Date.now().toString(), ...data } as NotableEvent])
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete notable event");
     }
-    setIsDialogOpen(false)
-  }
+  };
 
+  const handleSave = async (data: Partial<NotableEvent>) => {
+    // Ensure date is an ISO 8601 string for the backend validator
+    const payload = {
+      ...data,
+      date: data.date ? new Date(data.date).toISOString() : undefined,
+    };
+
+    if (editingEvent) {
+      // update
+      const res = await fetch(apiList.notableEvents.update(editingEvent._id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEvents((prev) => prev.map((e) => (e._id === editingEvent._id ? j.event : e)));
+        toast.success("Notable event updated");
+        setIsDialogOpen(false);
+      } else {
+        toast.error(j.message || "Failed to update notable event");
+      }
+    } else {
+      // create
+      const res = await fetch(apiList.notableEvents.create, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEvents((prev) => [j.event, ...prev]);
+        toast.success("Notable event created");
+        setIsDialogOpen(false);
+      } else {
+        toast.error(j.message || "Failed to create notable event");
+      }
+    }
+  };
+
+  // --- Table columns ---
   const columns = [
     {
       key: "title",
@@ -108,7 +169,7 @@ export default function NotableEventsPage() {
       render: (event: NotableEvent) =>
         event.featured ? <Badge>Featured</Badge> : <Badge variant="outline">Regular</Badge>,
     },
-  ]
+  ];
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
@@ -123,14 +184,44 @@ export default function NotableEventsPage() {
         searchPlaceholder="Search notable events..."
       />
 
+      {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden">
+          <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
             <DialogTitle>{editingEvent ? "Edit Notable Event" : "Add Notable Event"}</DialogTitle>
           </DialogHeader>
-          <NotableEventForm initialData={editingEvent} onSave={handleSave} onCancel={() => setIsDialogOpen(false)} />
+          <div className="overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]">
+            <NotableEventForm
+              initialData={editingEvent || undefined}
+              onSave={handleSave}
+              onCancel={() => setIsDialogOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!open) resolveConfirm(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmTitle}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDesc}</p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => resolveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => resolveConfirm(true)}>
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

@@ -1,125 +1,153 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { PageHeader } from "@/components/admin/page-header"
-import { DataTable } from "@/components/admin/data-table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { User, Mail, Phone, Calendar, DollarSign } from "lucide-react"
+import { useEffect, useMemo, useState } from "react";
+import apiList, { withQuery } from "@/apiList";
 
-interface Registration {
-  _id: string
-  fields: {
-    name: string
-    email: string
-    phone: string
-  }
-  eventId: string
-  eventTitle: string
-  eventLink?: string
-  date: string
-  eventType: string
-  paid: boolean
-  amount?: number
-  paymentId?: string
-}
+import { PageHeader } from "@/components/admin/page-header";
+import { DataTable } from "@/components/admin/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { User, Mail, Phone, Calendar, DollarSign } from "lucide-react";
+import { toast } from "react-toastify";
 
-const mockRegistrations: Registration[] = [
-  {
-    _id: "1",
-    fields: { name: "John Doe", email: "john@example.com", phone: "+1234567890" },
-    eventId: "evt1",
-    eventTitle: "Summer Tech Festival 2025",
-    date: "2025-07-15",
-    eventType: "Free_with_approval",
-    paid: false,
-  },
-  {
-    _id: "2",
-    fields: { name: "Jane Smith", email: "jane@example.com", phone: "+1987654321" },
-    eventId: "evt2",
-    eventTitle: "Developer Conference",
-    date: "2025-09-20",
-    eventType: "Paid",
-    paid: true,
-    amount: 299,
-    paymentId: "pay_123",
-  },
-  {
-    _id: "3",
-    fields: { name: "Bob Johnson", email: "bob@example.com", phone: "+1122334455" },
-    eventId: "evt3",
-    eventTitle: "AI Workshop Series",
-    date: "2025-10-05",
-    eventType: "Paid_with_approval",
-    paid: true,
-    amount: 499,
-    paymentId: "pay_456",
-  },
-]
+type RegStatus = "pending" | "approved" | "rejected";
 
-const mockShows = [
-  { _id: "1", title: "Breaking Boundaries" },
-  { _id: "2", title: "Tech Talks" },
-  { _id: "3", title: "Future Forward" },
-]
+type Registration = {
+  _id: string;
+  fields: Record<string, any>;
+  eventId: string;
+  eventTitle: string;
+  eventType: string; // Free / Paid / *_with_approval
+  eventDate?: string;
+  createdAt?: string;
+  paid: boolean;
+  amount?: number;
+  paymentId?: string;
+  status: RegStatus;
+  notes?: string;
+};
+
+type ApiListResponse = {
+  registrations: Registration[];
+  pagination?: { total: number; page: number; pages: number; limit: number };
+};
 
 export default function RegistrationsPage() {
-  const [registrations, setRegistrations] = useState<Registration[]>(mockRegistrations)
-  const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [rows, setRows] = useState<Registration[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const [dateFrom, setDateFrom] = useState<string>("")
-  const [dateTo, setDateTo] = useState<string>("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  // Filters
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | RegStatus>("all");
 
-  const filteredRegistrations = registrations.filter((reg) => {
-    const regDate = new Date(reg.date)
-    const fromDate = dateFrom ? new Date(dateFrom) : null
-    const toDate = dateTo ? new Date(dateTo) : null
+  // selection
+  const [selected, setSelected] = useState<Registration | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    if (fromDate && regDate < fromDate) return false
-    if (toDate && regDate > toDate) return false
-
-    if (statusFilter !== "all") {
-      if (statusFilter === "pending" && !reg.eventType.includes("approval")) return false
-      if (statusFilter === "approved" && reg.eventType.includes("approval")) return false
+  const load = async () => {
+    try {
+      setLoading(true);
+      const url = withQuery(apiList.registrations.list, {
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        limit: 100,
+      });
+      const res = await fetch(url, { credentials: "include" });
+      const j: ApiListResponse = await res.json();
+      if (!res.ok) throw new Error((j as any)?.message || "Failed to load registrations");
+      setRows(j.registrations || []);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to load registrations");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return true
-  })
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleView = (registration: Registration) => {
-    setSelectedRegistration(registration)
-    setIsDialogOpen(true)
-  }
+  const clearFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setStatusFilter("all");
+    setTimeout(load, 0);
+  };
 
-  const handleDelete = (registration: Registration) => {
-    if (confirm(`Are you sure you want to delete registration for "${registration.fields.name}"?`)) {
-      setRegistrations(registrations.filter((r) => r._id !== registration._id))
+  const approve = async (id: string) => {
+    const res = await fetch(apiList.registrations.update(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ status: "approved" }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
+      setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
+      toast.success("Registration approved");
+    } else toast.error(j.message || "Failed to approve");
+  };
+
+  const reject = async (id: string) => {
+    const res = await fetch(apiList.registrations.update(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ status: "rejected" }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
+      setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
+      toast.success("Registration rejected");
+    } else toast.error(j.message || "Failed to reject");
+  };
+
+  const remove = async (reg: Registration) => {
+    if (!confirm(`Delete registration for "${reg.fields?.name || reg.fields?.Name || "attendee"}"?`)) return;
+    const res = await fetch(apiList.registrations.delete(reg._id), {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setRows((prev) => prev.filter((r) => r._id !== reg._id));
+      toast.success("Registration deleted");
+    } else {
+      const j = await res.json().catch(() => ({}));
+      toast.error(j.message || "Failed to delete");
     }
-  }
+  };
 
   const columns = [
     {
       key: "fields.name",
       label: "Attendee",
-      render: (reg: Registration) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 font-medium">
-            <User className="h-4 w-4 text-muted-foreground" />
-            {reg.fields.name}
+      render: (reg: Registration) => {
+        const name = reg.fields?.name || reg.fields?.Name || "—";
+        const email = reg.fields?.email || reg.fields?.Email || "";
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-medium">
+              <User className="h-4 w-4 text-muted-foreground" />
+              {name}
+            </div>
+            {email ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Mail className="h-3 w-3" />
+                {email}
+              </div>
+            ) : null}
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Mail className="h-3 w-3" />
-            {reg.fields.email}
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: "eventTitle",
@@ -129,37 +157,42 @@ export default function RegistrationsPage() {
           <div className="font-medium">{reg.eventTitle}</div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar className="h-3 w-3" />
-            {new Date(reg.date).toLocaleDateString()}
+            {new Date(reg.eventDate || reg.createdAt || Date.now()).toLocaleDateString()}
           </div>
         </div>
       ),
     },
     {
-      key: "eventType",
-      label: "Type",
-      render: (reg: Registration) => <Badge variant="outline">{reg.eventType.replace(/_/g, " ")}</Badge>,
+      key: "status",
+      label: "Status",
+      render: (reg: Registration) => {
+        const color =
+          reg.status === "approved" ? "default" : reg.status === "rejected" ? "destructive" : "secondary";
+        return <Badge variant={color as any}>{reg.status}</Badge>;
+      },
     },
     {
       key: "paid",
-      label: "Payment Status",
+      label: "Payment",
       render: (reg: Registration) => (
         <div className="space-y-1">
           <Badge variant={reg.paid ? "default" : "secondary"}>{reg.paid ? "Paid" : "Free"}</Badge>
-          {reg.amount && (
+          {reg.amount ? (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <DollarSign className="h-3 w-3" />
               {reg.amount}
             </div>
-          )}
+          ) : null}
         </div>
       ),
     },
-  ]
+  ];
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
       <PageHeader title="Registrations" description="Manage event registrations and attendees" />
 
+      {/* Filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-2">
           <Label htmlFor="date-from">From Date</Label>
@@ -171,105 +204,94 @@ export default function RegistrationsPage() {
         </div>
         <div className="flex-1 space-y-2">
           <Label htmlFor="status-filter">Status</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
             <SelectTrigger>
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Registrations</SelectItem>
-              <SelectItem value="pending">Pending Approval</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        {(dateFrom || dateTo || statusFilter !== "all") && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setDateFrom("")
-              setDateTo("")
-              setStatusFilter("all")
-            }}
-          >
-            Clear Filters
-          </Button>
-        )}
+        <div className="flex gap-2">
+          <Button onClick={load} disabled={loading}>Apply</Button>
+          {(dateFrom || dateTo || statusFilter !== "all") && (
+            <Button variant="outline" onClick={clearFilters} disabled={loading}>Clear</Button>
+          )}
+        </div>
       </div>
 
       <DataTable
-        data={filteredRegistrations}
+        data={rows}
         columns={columns}
-        onEdit={handleView}
-        onDelete={handleDelete}
+        onEdit={(r: Registration) => {
+          setSelected(r);
+          setIsDialogOpen(true);
+        }}
+        onDelete={remove}
         searchPlaceholder="Search registrations..."
       />
 
+      {/* Details / Approve / Reject */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Registration Details</DialogTitle>
           </DialogHeader>
-          {selectedRegistration && (
+
+          {selected && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <h3 className="font-semibold">Attendee Information</h3>
+                <h3 className="font-semibold">Attendee</h3>
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedRegistration.fields.name}</span>
+                    <span>{selected.fields?.name || selected.fields?.Name || "—"}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedRegistration.fields.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedRegistration.fields.phone}</span>
-                  </div>
+                  {selected.fields?.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span>{selected.fields.email}</span>
+                    </div>
+                  )}
+                  {selected.fields?.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span>{selected.fields.phone}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <h3 className="font-semibold">Event Information</h3>
+                <h3 className="font-semibold">Event</h3>
                 <div className="space-y-1 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Event:</span> {selectedRegistration.eventTitle}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Date:</span>{" "}
-                    {new Date(selectedRegistration.date).toLocaleDateString()}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>{" "}
-                    {selectedRegistration.eventType.replace(/_/g, " ")}
-                  </div>
+                  <div><span className="text-muted-foreground">Event:</span> {selected.eventTitle}</div>
+                  <div><span className="text-muted-foreground">Date:</span> {new Date(selected.eventDate || selected.createdAt || Date.now()).toLocaleDateString()}</div>
+                  <div><span className="text-muted-foreground">Type:</span> {selected.eventType.replace(/_/g, " ")}</div>
                 </div>
               </div>
 
-              {selectedRegistration.eventType.includes("approval") && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold">Approval Status</h3>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setIsDialogOpen(false)}>
-                      Approve
-                    </Button>
-                    <Button variant="destructive" className="flex-1" onClick={() => setIsDialogOpen(false)}>
-                      Reject
-                    </Button>
-                  </div>
+              {selected.status === "pending" && (
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 bg-transparent" onClick={() => approve(selected._id)}>
+                    Approve
+                  </Button>
+                  <Button variant="destructive" className="flex-1" onClick={() => reject(selected._id)}>
+                    Reject
+                  </Button>
                 </div>
               )}
 
-              {selectedRegistration.paid && (
+              {selected.paid && (
                 <div className="space-y-2">
-                  <h3 className="font-semibold">Payment Information</h3>
+                  <h3 className="font-semibold">Payment</h3>
                   <div className="space-y-1 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Amount:</span> ${selectedRegistration.amount}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Payment ID:</span> {selectedRegistration.paymentId}
-                    </div>
+                    <div><span className="text-muted-foreground">Amount:</span> ${selected.amount}</div>
+                    <div><span className="text-muted-foreground">Payment ID:</span> {selected.paymentId}</div>
                   </div>
                 </div>
               )}
@@ -282,5 +304,5 @@ export default function RegistrationsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
