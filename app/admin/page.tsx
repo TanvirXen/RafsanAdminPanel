@@ -31,12 +31,22 @@ type DashboardSummary = {
     registrations: number;
     revenue: number;
     upcomingEvents?: number;
+    episodes?: number;
+    reels?: number;
+    brands?: number;
+    notableEvents?: number;
   };
   recent: Array<{
     action: string;
     item: string;
     time: string; // already humanized from server
-    type: "show" | "event" | "registration" | "payment";
+    type:
+      | "show"
+      | "event"
+      | "registration"
+      | "payment"
+      | "brand"
+      | "notableEvent";
   }>;
 };
 
@@ -51,8 +61,8 @@ export default function AdminDashboard() {
       try {
         const j = await apiFetch<DashboardSummary>(apiList.dashboard.summary);
         setSummary(j);
-      } catch (e) {
-        // non-fatal for the page; just keep the placeholders
+      } catch {
+        // non-fatal; keep placeholders
       } finally {
         setLoadingSummary(false);
       }
@@ -97,54 +107,54 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <div className="p-8">
-        <div className="mb-2 h-6 w-40 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-64 animate-pulse rounded bg-muted" />
-        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className='p-8'>
+        <div className='mb-2 h-6 w-40 animate-pulse rounded bg-muted' />
+        <div className='h-4 w-64 animate-pulse rounded bg-muted' />
+        <div className='mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 rounded-lg bg-muted animate-pulse" />
+            <div key={i} className='h-28 rounded-lg bg-muted animate-pulse' />
           ))}
         </div>
       </div>
     );
   }
 
+  const t = summary?.totals;
+
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <div className="flex items-center justify-between">
+    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+      <div className='flex items-center justify-between'>
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className='text-3xl font-semibold tracking-tight'>Dashboard</h1>
+          <p className='text-muted-foreground'>
             Welcome back{me?.name ? `, ${me.name}` : ""}! Here's what's
             happening today.
           </p>
         </div>
         <button
           onClick={logout}
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted"
-          title="Logout"
+          className='inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted'
+          title='Logout'
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className='h-4 w-4' />
           Logout
         </button>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
         {stats.map((stat) => (
           <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.name}
-              </CardTitle>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>{stat.name}</CardTitle>
+              <stat.icon className='h-4 w-4 text-muted-foreground' />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">
+              <div className='text-2xl font-semibold'>
                 {loadingSummary ? "…" : stat.value}
               </div>
               {stat.change ? (
-                <p className="text-xs text-muted-foreground">{stat.change}</p>
+                <p className='text-xs text-muted-foreground'>{stat.change}</p>
               ) : null}
             </CardContent>
           </Card>
@@ -152,34 +162,36 @@ export default function AdminDashboard() {
       </div>
 
       {/* Recent Activity & Quick Stats */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className='grid gap-4 lg:grid-cols-2'>
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
             <CardDescription>Latest updates across your CMS</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className='space-y-4'>
               {(summary?.recent || []).map((activity, index) => (
-                <div key={index} className="flex items-start gap-4">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                    <Activity className="h-4 w-4" />
+                <div key={index} className='flex items-start gap-4'>
+                  <div className='flex h-9 w-9 items-center justify-center rounded-lg bg-muted'>
+                    <Activity className='h-4 w-4' />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
+                  <div className='flex-1 space-y-1'>
+                    <p className='text-sm font-medium leading-none'>
                       {activity.action}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className='text-sm text-muted-foreground'>
                       {activity.item}
                     </p>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className='text-xs text-muted-foreground'>
                     {activity.time}
                   </div>
                 </div>
               ))}
               {!summary?.recent?.length && (
-                <div className="text-sm text-muted-foreground">No recent activity</div>
+                <div className='text-sm text-muted-foreground'>
+                  No recent activity
+                </div>
               )}
             </div>
           </CardContent>
@@ -191,34 +203,42 @@ export default function AdminDashboard() {
             <CardDescription>Content overview</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Film className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Total Episodes</span>
+            <div className='space-y-4'>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <Film className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-sm'>Total Episodes</span>
                 </div>
-                <span className="text-sm font-semibold">—</span>
+                <span className='text-sm font-semibold'>
+                  {loadingSummary ? "—" : String(t?.episodes ?? 0)}
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Total Reels</span>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <TrendingUp className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-sm'>Total Reels</span>
                 </div>
-                <span className="text-sm font-semibold">—</span>
+                <span className='text-sm font-semibold'>
+                  {loadingSummary ? "—" : String(t?.reels ?? 0)}
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Award className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Notable Events</span>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <Award className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-sm'>Notable Events</span>
                 </div>
-                <span className="text-sm font-semibold">—</span>
+                <span className='text-sm font-semibold'>
+                  {loadingSummary ? "—" : String(t?.notableEvents ?? 0)}
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Brands</span>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <Database className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-sm'>Brands</span>
                 </div>
-                <span className="text-sm font-semibold">—</span>
+                <span className='text-sm font-semibold'>
+                  {loadingSummary ? "—" : String(t?.brands ?? 0)}
+                </span>
               </div>
             </div>
           </CardContent>
