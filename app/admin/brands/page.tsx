@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -69,9 +70,12 @@ export default function BrandsPage() {
   /* load */
   useEffect(() => {
     (async () => {
-      const res = await fetch(apiList.brands.list, {  });
-      const j = await res.json();
-      setBrands(j.brands || []);
+      try {
+        const j = await apiFetch<{ brands: Brand[] }>(apiList.brands.list);
+        setBrands(j.brands || []);
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to load brands");
+      }
     })();
   }, []);
 
@@ -93,54 +97,43 @@ export default function BrandsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(apiList.brands.delete(brand._id), {
-      method: "DELETE",
-      
-    });
-    if (res.ok) {
+    try {
+      await apiFetch(apiList.brands.delete(brand._id), { method: "DELETE" });
       setBrands((prev) => prev.filter((b) => b._id !== brand._id));
       toast.success("Brand deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete brand");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete brand");
     }
   };
 
   const handleSave = async (data: Partial<Brand>) => {
-    if (editingBrand) {
-      // update (PUT)
-      const res = await fetch(apiList.brands.update(editingBrand._id), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(data),
-      });
-      const j = await res.json();
-      if (res.ok) {
+    try {
+      if (editingBrand) {
+        // update (PUT)
+        const j = await apiFetch<{ brand: Brand }>(
+          apiList.brands.update(editingBrand._id),
+          { method: "PUT", body: JSON.stringify(data) }
+        );
         setBrands((prev) =>
           prev.map((b) => (b._id === editingBrand._id ? j.brand : b))
         );
         toast.success("Brand updated");
       } else {
-        toast.error(j.message || "Failed to update brand");
-      }
-    } else {
-      // create
-      const res = await fetch(apiList.brands.create, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(data),
-      });
-      const j = await res.json();
-      if (res.ok) {
+        // create
+        const j = await apiFetch<{ brand: Brand }>(apiList.brands.create, {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
         setBrands((prev) => [j.brand, ...prev]);
         toast.success("Brand created");
-      } else {
-        toast.error(j.message || "Failed to create brand");
       }
+      setIsDialogOpen(false);
+    } catch (e: any) {
+      toast.error(
+        e?.message ||
+          (editingBrand ? "Failed to update brand" : "Failed to create brand")
+      );
     }
-    setIsDialogOpen(false);
   };
 
   /* table columns */

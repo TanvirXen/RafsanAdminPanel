@@ -2,13 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import apiList, { withQuery } from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
+import { useAuth } from "@/hooks/use-auth";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User, Mail, Phone, Calendar, DollarSign } from "lucide-react";
@@ -37,6 +50,8 @@ type ApiListResponse = {
 };
 
 export default function RegistrationsPage() {
+  const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
+
   const [rows, setRows] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -58,21 +73,19 @@ export default function RegistrationsPage() {
         status: statusFilter === "all" ? undefined : statusFilter,
         limit: 100,
       });
-      const res = await fetch(url, {  });
-      const j: ApiListResponse = await res.json();
-      if (!res.ok) throw new Error((j as any)?.message || "Failed to load registrations");
+      const j = await apiFetch<ApiListResponse>(url);
       setRows(j.registrations || []);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load registrations");
+      toast.error(e?.message || "Failed to load registrations");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    if (!authLoading) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading]);
 
   const clearFilters = () => {
     setDateFrom("");
@@ -82,47 +95,56 @@ export default function RegistrationsPage() {
   };
 
   const approve = async (id: string) => {
-    const res = await fetch(apiList.registrations.update(id), {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      
-      body: JSON.stringify({ status: "approved" }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (res.ok) {
+    try {
+      const j = await apiFetch<{ registration: Registration }>(
+        apiList.registrations.update(id),
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "approved" }),
+        }
+      );
       setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
       setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
       toast.success("Registration approved");
-    } else toast.error(j.message || "Failed to approve");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to approve");
+    }
   };
 
   const reject = async (id: string) => {
-    const res = await fetch(apiList.registrations.update(id), {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      
-      body: JSON.stringify({ status: "rejected" }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (res.ok) {
+    try {
+      const j = await apiFetch<{ registration: Registration }>(
+        apiList.registrations.update(id),
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "rejected" }),
+        }
+      );
       setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
       setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
       toast.success("Registration rejected");
-    } else toast.error(j.message || "Failed to reject");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to reject");
+    }
   };
 
   const remove = async (reg: Registration) => {
-    if (!confirm(`Delete registration for "${reg.fields?.name || reg.fields?.Name || "attendee"}"?`)) return;
-    const res = await fetch(apiList.registrations.delete(reg._id), {
-      method: "DELETE",
-      
-    });
-    if (res.ok) {
+    if (
+      !confirm(
+        `Delete registration for "${
+          reg.fields?.name || reg.fields?.Name || "attendee"
+        }"?`
+      )
+    )
+      return;
+    try {
+      await apiFetch(apiList.registrations.delete(reg._id), {
+        method: "DELETE",
+      });
       setRows((prev) => prev.filter((r) => r._id !== reg._id));
       toast.success("Registration deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete");
     }
   };
 
@@ -134,14 +156,14 @@ export default function RegistrationsPage() {
         const name = reg.fields?.name || reg.fields?.Name || "—";
         const email = reg.fields?.email || reg.fields?.Email || "";
         return (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 font-medium">
-              <User className="h-4 w-4 text-muted-foreground" />
+          <div className='space-y-1'>
+            <div className='flex items-center gap-2 font-medium'>
+              <User className='h-4 w-4 text-muted-foreground' />
               {name}
             </div>
             {email ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Mail className="h-3 w-3" />
+              <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                <Mail className='h-3 w-3' />
                 {email}
               </div>
             ) : null}
@@ -153,11 +175,13 @@ export default function RegistrationsPage() {
       key: "eventTitle",
       label: "Event",
       render: (reg: Registration) => (
-        <div className="space-y-1">
-          <div className="font-medium">{reg.eventTitle}</div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3" />
-            {new Date(reg.eventDate || reg.createdAt || Date.now()).toLocaleDateString()}
+        <div className='space-y-1'>
+          <div className='font-medium'>{reg.eventTitle}</div>
+          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+            <Calendar className='h-3 w-3' />
+            {new Date(
+              reg.eventDate || reg.createdAt || Date.now()
+            ).toLocaleDateString()}
           </div>
         </div>
       ),
@@ -167,7 +191,11 @@ export default function RegistrationsPage() {
       label: "Status",
       render: (reg: Registration) => {
         const color =
-          reg.status === "approved" ? "default" : reg.status === "rejected" ? "destructive" : "secondary";
+          reg.status === "approved"
+            ? "default"
+            : reg.status === "rejected"
+            ? "destructive"
+            : "secondary";
         return <Badge variant={color as any}>{reg.status}</Badge>;
       },
     },
@@ -175,11 +203,13 @@ export default function RegistrationsPage() {
       key: "paid",
       label: "Payment",
       render: (reg: Registration) => (
-        <div className="space-y-1">
-          <Badge variant={reg.paid ? "default" : "secondary"}>{reg.paid ? "Paid" : "Free"}</Badge>
+        <div className='space-y-1'>
+          <Badge variant={reg.paid ? "default" : "secondary"}>
+            {reg.paid ? "Paid" : "Free"}
+          </Badge>
           {reg.amount ? (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
+            <div className='flex items-center gap-1 text-xs text-muted-foreground'>
+              <DollarSign className='h-3 w-3' />
               {reg.amount}
             </div>
           ) : null}
@@ -189,37 +219,57 @@ export default function RegistrationsPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <PageHeader title="Registrations" description="Manage event registrations and attendees" />
+    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+      <PageHeader
+        title='Registrations'
+        description='Manage event registrations and attendees'
+      />
 
       {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="date-from">From Date</Label>
-          <Input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-end'>
+        <div className='flex-1 space-y-2'>
+          <Label htmlFor='date-from'>From Date</Label>
+          <Input
+            id='date-from'
+            type='date'
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
         </div>
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="date-to">To Date</Label>
-          <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <div className='flex-1 space-y-2'>
+          <Label htmlFor='date-to'>To Date</Label>
+          <Input
+            id='date-to'
+            type='date'
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
         </div>
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="status-filter">Status</Label>
-          <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+        <div className='flex-1 space-y-2'>
+          <Label htmlFor='status-filter'>Status</Label>
+          <Select
+            value={statusFilter}
+            onValueChange={(v: any) => setStatusFilter(v)}
+          >
             <SelectTrigger>
-              <SelectValue placeholder="All statuses" />
+              <SelectValue placeholder='All statuses' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value='all'>All</SelectItem>
+              <SelectItem value='pending'>Pending</SelectItem>
+              <SelectItem value='approved'>Approved</SelectItem>
+              <SelectItem value='rejected'>Rejected</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={load} disabled={loading}>Apply</Button>
+        <div className='flex gap-2'>
+          <Button onClick={load} disabled={loading}>
+            Apply
+          </Button>
           {(dateFrom || dateTo || statusFilter !== "all") && (
-            <Button variant="outline" onClick={clearFilters} disabled={loading}>Clear</Button>
+            <Button variant='outline' onClick={clearFilters} disabled={loading}>
+              Clear
+            </Button>
           )}
         </div>
       </div>
@@ -232,7 +282,7 @@ export default function RegistrationsPage() {
           setIsDialogOpen(true);
         }}
         onDelete={remove}
-        searchPlaceholder="Search registrations..."
+        searchPlaceholder='Search registrations...'
       />
 
       {/* Details / Approve / Reject */}
@@ -243,60 +293,87 @@ export default function RegistrationsPage() {
           </DialogHeader>
 
           {selected && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="font-semibold">Attendee</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{selected.fields?.name || selected.fields?.Name || "—"}</span>
+            <div className='space-y-4'>
+              <div className='space-y-2'>
+                <h3 className='font-semibold'>Attendee</h3>
+                <div className='space-y-1 text-sm'>
+                  <div className='flex items-center gap-2'>
+                    <User className='h-4 w-4 text-muted-foreground' />
+                    <span>
+                      {selected.fields?.name || selected.fields?.Name || "—"}
+                    </span>
                   </div>
                   {selected.fields?.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
+                    <div className='flex items-center gap-2'>
+                      <Mail className='h-4 w-4 text-muted-foreground' />
                       <span>{selected.fields.email}</span>
                     </div>
                   )}
                   {selected.fields?.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
+                    <div className='flex items-center gap-2'>
+                      <Phone className='h-4 w-4 text-muted-foreground' />
                       <span>{selected.fields.phone}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h3 className="font-semibold">Event</h3>
-                <div className="space-y-1 text-sm">
-                  <div><span className="text-muted-foreground">Event:</span> {selected.eventTitle}</div>
-                  <div><span className="text-muted-foreground">Date:</span> {new Date(selected.eventDate || selected.createdAt || Date.now()).toLocaleDateString()}</div>
-                  <div><span className="text-muted-foreground">Type:</span> {selected.eventType.replace(/_/g, " ")}</div>
+              <div className='space-y-2'>
+                <h3 className='font-semibold'>Event</h3>
+                <div className='space-y-1 text-sm'>
+                  <div>
+                    <span className='text-muted-foreground'>Event:</span>{" "}
+                    {selected.eventTitle}
+                  </div>
+                  <div>
+                    <span className='text-muted-foreground'>Date:</span>{" "}
+                    {new Date(
+                      selected.eventDate || selected.createdAt || Date.now()
+                    ).toLocaleDateString()}
+                  </div>
+                  <div>
+                    <span className='text-muted-foreground'>Type:</span>{" "}
+                    {selected.eventType.replace(/_/g, " ")}
+                  </div>
                 </div>
               </div>
 
               {selected.status === "pending" && (
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 bg-transparent" onClick={() => approve(selected._id)}>
+                <div className='flex gap-2'>
+                  <Button
+                    variant='outline'
+                    className='flex-1 bg-transparent'
+                    onClick={() => approve(selected._id)}
+                  >
                     Approve
                   </Button>
-                  <Button variant="destructive" className="flex-1" onClick={() => reject(selected._id)}>
+                  <Button
+                    variant='destructive'
+                    className='flex-1'
+                    onClick={() => reject(selected._id)}
+                  >
                     Reject
                   </Button>
                 </div>
               )}
 
               {selected.paid && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold">Payment</h3>
-                  <div className="space-y-1 text-sm">
-                    <div><span className="text-muted-foreground">Amount:</span> ${selected.amount}</div>
-                    <div><span className="text-muted-foreground">Payment ID:</span> {selected.paymentId}</div>
+                <div className='space-y-2'>
+                  <h3 className='font-semibold'>Payment</h3>
+                  <div className='space-y-1 text-sm'>
+                    <div>
+                      <span className='text-muted-foreground'>Amount:</span> $
+                      {selected.amount}
+                    </div>
+                    <div>
+                      <span className='text-muted-foreground'>Payment ID:</span>{" "}
+                      {selected.paymentId}
+                    </div>
                   </div>
                 </div>
               )}
 
-              <div className="flex justify-end">
+              <div className='flex justify-end'>
                 <Button onClick={() => setIsDialogOpen(false)}>Close</Button>
               </div>
             </div>

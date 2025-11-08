@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -18,7 +19,7 @@ import { toast } from "react-toastify";
 
 interface TimelineItem {
   _id: string;
-  date: string;         // ISO string
+  date: string; // ISO string
   imageLink: string;
   description: string;
   cardUrl?: string;
@@ -33,7 +34,9 @@ export default function TimelinePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(undefined);
+  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(
+    undefined
+  );
 
   const askConfirm = (title: string, desc: string) =>
     new Promise<boolean>((resolve) => {
@@ -53,11 +56,12 @@ export default function TimelinePage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.timeline.list, {  });
-        const j = await res.json();
+        const j = await apiFetch<{ items: TimelineItem[] }>(
+          apiList.timeline.list
+        );
         setTimeline(j.items || []);
-      } catch {
-        toast.error("Failed to load timeline");
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to load timeline");
       }
     })();
   }, []);
@@ -74,19 +78,18 @@ export default function TimelinePage() {
   };
 
   const handleDelete = async (item: TimelineItem) => {
-    const ok = await askConfirm("Delete Timeline Item", "Are you sure you want to delete this timeline item?");
+    const ok = await askConfirm(
+      "Delete Timeline Item",
+      "Are you sure you want to delete this timeline item?"
+    );
     if (!ok) return;
 
-    const res = await fetch(apiList.timeline.delete(item._id), {
-      method: "DELETE",
-      
-    });
-    if (res.ok) {
+    try {
+      await apiFetch(apiList.timeline.delete(item._id), { method: "DELETE" });
       setTimeline((prev) => prev.filter((t) => t._id !== item._id));
       toast.success("Timeline item deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete timeline item");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete timeline item");
     }
   };
 
@@ -97,38 +100,39 @@ export default function TimelinePage() {
       date: data.date ? new Date(data.date).toISOString() : undefined,
     };
 
-    if (editingItem) {
-      // update
-      const res = await fetch(apiList.timeline.update(editingItem._id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setTimeline((prev) => prev.map((t) => (t._id === editingItem._id ? j.item : t)));
+    try {
+      if (editingItem) {
+        const j = await apiFetch<{ item: TimelineItem }>(
+          apiList.timeline.update(editingItem._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          }
+        );
+        setTimeline((prev) =>
+          prev.map((t) => (t._id === editingItem._id ? j.item : t))
+        );
         toast.success("Timeline item updated");
         setIsDialogOpen(false);
       } else {
-        toast.error(j.message || "Failed to update timeline item");
-      }
-    } else {
-      // create
-      const res = await fetch(apiList.timeline.create, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
+        const j = await apiFetch<{ item: TimelineItem }>(
+          apiList.timeline.create,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          }
+        );
         setTimeline((prev) => [j.item, ...prev]);
         toast.success("Timeline item created");
         setIsDialogOpen(false);
-      } else {
-        toast.error(j.message || "Failed to create timeline item");
       }
+    } catch (e: any) {
+      toast.error(
+        e?.message ||
+          (editingItem
+            ? "Failed to update timeline item"
+            : "Failed to create timeline item")
+      );
     }
   };
 
@@ -138,8 +142,8 @@ export default function TimelinePage() {
       key: "date",
       label: "Date",
       render: (item: TimelineItem) => (
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+        <div className='flex items-center gap-2'>
+          <Calendar className='h-4 w-4 text-muted-foreground' />
           {new Date(item.date).toLocaleDateString()}
         </div>
       ),
@@ -147,28 +151,34 @@ export default function TimelinePage() {
     {
       key: "description",
       label: "Description",
-      render: (item: TimelineItem) => <span className="line-clamp-2">{item.description}</span>,
+      render: (item: TimelineItem) => (
+        <span className='line-clamp-2'>{item.description}</span>
+      ),
     },
     {
       key: "imageLink",
       label: "Image",
       render: () => (
-        <div className="flex items-center gap-2">
-          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Image attached</span>
+        <div className='flex items-center gap-2'>
+          <ImageIcon className='h-4 w-4 text-muted-foreground' />
+          <span className='text-xs text-muted-foreground'>Image attached</span>
         </div>
       ),
     },
     {
       key: "cardUrl",
       label: "Card URL",
-      render: (item: TimelineItem) => (item.cardUrl ? <span className="text-xs">{item.cardUrl}</span> : "-"),
+      render: (item: TimelineItem) =>
+        item.cardUrl ? <span className='text-xs'>{item.cardUrl}</span> : "-",
     },
   ];
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      <PageHeader title="Journey Timeline" description="Manage your company's journey and milestones" />
+    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+      <PageHeader
+        title='Journey Timeline'
+        description="Manage your company's journey and milestones"
+      />
 
       <DataTable
         data={timeline}
@@ -176,16 +186,18 @@ export default function TimelinePage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Search timeline..."
+        searchPlaceholder='Search timeline...'
       />
 
       {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden">
-          <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
-            <DialogTitle>{editingItem ? "Edit Timeline Item" : "Add Timeline Item"}</DialogTitle>
+        <DialogContent className='w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden'>
+          <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
+            <DialogTitle>
+              {editingItem ? "Edit Timeline Item" : "Add Timeline Item"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]">
+          <div className='overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]'>
             <TimelineForm
               initialData={editingItem || undefined}
               onSave={handleSave}
@@ -202,16 +214,16 @@ export default function TimelinePage() {
           if (!open) resolveConfirm(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className='sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>{confirmTitle}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">{confirmDesc}</p>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => resolveConfirm(false)}>
+          <p className='text-sm text-muted-foreground'>{confirmDesc}</p>
+          <div className='mt-6 flex justify-end gap-2'>
+            <Button variant='outline' onClick={() => resolveConfirm(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => resolveConfirm(true)}>
+            <Button variant='destructive' onClick={() => resolveConfirm(true)}>
               Delete
             </Button>
           </div>

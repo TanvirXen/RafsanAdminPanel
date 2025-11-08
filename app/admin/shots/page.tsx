@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,9 @@ export default function ShotsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(undefined);
+  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(
+    undefined
+  );
 
   const askConfirm = (title: string, desc: string) =>
     new Promise<boolean>((resolve) => {
@@ -57,13 +60,10 @@ export default function ShotsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.shots.list, {  });
-        const j = await res.json();
-        setShots(
-          (j.shots || []).sort((a: Shot, b: Shot) => a.sequence - b.sequence)
-        );
-      } catch {
-        toast.error("Failed to load shots");
+        const j = await apiFetch<{ shots: Shot[] }>(apiList.shots.list);
+        setShots((j.shots || []).sort((a, b) => a.sequence - b.sequence));
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to load shots");
       }
     })();
   }, []);
@@ -88,16 +88,12 @@ export default function ShotsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(apiList.shots.delete(shot._id), {
-      method: "DELETE",
-      
-    });
-    if (res.ok) {
+    try {
+      await apiFetch(apiList.shots.delete(shot._id), { method: "DELETE" });
       setShots((prev) => prev.filter((s) => s._id !== shot._id));
       toast.success("Shot deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete shot");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete shot");
     }
   };
 
@@ -111,15 +107,15 @@ export default function ShotsPage() {
       sequence: Math.max(1, Number(formData.sequence || 1)),
     };
 
-    if (editingShot) {
-      const res = await fetch(apiList.shots.update(editingShot._id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
+    try {
+      if (editingShot) {
+        const j = await apiFetch<{ shot: Shot }>(
+          apiList.shots.update(editingShot._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          }
+        );
         setShots((prev) =>
           prev
             .map((s) => (s._id === editingShot._id ? j.shot : s))
@@ -128,25 +124,21 @@ export default function ShotsPage() {
         toast.success("Shot updated");
         setIsDialogOpen(false);
       } else {
-        toast.error(j.message || "Failed to update shot");
-      }
-    } else {
-      const res = await fetch(apiList.shots.create, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
+        const j = await apiFetch<{ shot: Shot }>(apiList.shots.create, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
         setShots((prev) =>
           [...prev, j.shot].sort((a, b) => a.sequence - b.sequence)
         );
         toast.success("Shot created");
         setIsDialogOpen(false);
-      } else {
-        toast.error(j.message || "Failed to create shot");
       }
+    } catch (e: any) {
+      toast.error(
+        e?.message ||
+          (editingShot ? "Failed to update shot" : "Failed to create shot")
+      );
     }
   };
 
@@ -156,37 +148,34 @@ export default function ShotsPage() {
     const b = direction === "up" ? shots[index - 1] : shots[index + 1];
     if (!a || !b) return;
 
+    const original = [...shots];
+
     // optimistic UI swap
     const swapped = [...shots];
     [swapped[index], swapped[direction === "up" ? index - 1 : index + 1]] = [
       b,
       a,
     ];
-    // recompute sequences to be contiguous
     swapped.forEach((s, i) => (s.sequence = i + 1));
     setShots(swapped);
 
-    // persist the two changed items (the rest kept same sequence)
     try {
       await Promise.all([
-        fetch(apiList.shots.update(a._id), {
+        apiFetch(apiList.shots.update(a._id), {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          
           body: JSON.stringify({
             sequence: swapped.find((x) => x._id === a._id)?.sequence,
           }),
         }),
-        fetch(apiList.shots.update(b._id), {
+        apiFetch(apiList.shots.update(b._id), {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          
           body: JSON.stringify({
             sequence: swapped.find((x) => x._id === b._id)?.sequence,
           }),
         }),
       ]);
     } catch {
+      setShots(original); // revert on failure
       toast.error("Failed to persist new order");
     }
   };

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import apiList, { withQuery } from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
+import { useAuth } from "@/hooks/use-auth";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -28,6 +30,8 @@ type ApiListResponse = {
 };
 
 export default function PaymentsPage() {
+  const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
+
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -49,23 +53,20 @@ export default function PaymentsPage() {
         page: opts?.page ?? page,
         limit,
       });
-      const res = await fetch(url, {});
-      const j: ApiListResponse = await res.json();
-      if (!res.ok)
-        throw new Error((j as any)?.message || "Failed to load payments");
+      const j = await apiFetch<ApiListResponse>(url);
       setPayments(j.payments || []);
       setTotal(j.pagination?.total || j.payments?.length || 0);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load payments");
+      toast.error(e?.message || "Failed to load payments");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    load({ page: 1 });
+    if (!authLoading) load({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // initial
+  }, [authLoading]); // initial after auth is known
 
   const applyFilters = () => {
     setPage(1);
