@@ -17,6 +17,7 @@ import {
 import { AlertCircle, CheckCircle, Mail, ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 
 type ResetStep = "email" | "otp" | "password" | "success";
 
@@ -44,20 +45,14 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch(apiList.auth.reset.request, {
+      const data = await apiFetch<{
+        message?: string;
+        expiresIn?: number;
+        demoCode?: string;
+      }>(apiList.auth.reset.request, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      if (!res.ok) {
-        let msg = "Failed to send OTP.";
-        try {
-          const d = await res.json();
-          if (d?.message) msg = d.message;
-        } catch {}
-        throw new Error(msg);
-      }
-      const data = await res.json(); // { message, expiresIn, (demoCode?) }
       setOtpTimer(Number(data?.expiresIn || 300));
       if (data?.demoCode) {
         // dev convenience
@@ -78,25 +73,16 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch(apiList.auth.reset.verify, {
+      await apiFetch(apiList.auth.reset.verify, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           code: otp.trim(),
         }),
       });
-      if (!res.ok) {
-        let msg = "Invalid or expired OTP.";
-        try {
-          const d = await res.json();
-          if (d?.message) msg = d.message;
-        } catch {}
-        throw new Error(msg);
-      }
       setStep("password");
     } catch (err: any) {
-      setError(err?.message || "Failed to verify OTP. Please try again.");
+      setError(err?.message || "Invalid or expired OTP.");
     } finally {
       setIsLoading(false);
     }
@@ -124,23 +110,14 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      const res = await fetch(apiList.auth.reset.confirm, {
+      await apiFetch(apiList.auth.reset.confirm, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           code: otp.trim(),
           newPassword,
         }),
       });
-      if (!res.ok) {
-        let msg = "Failed to reset password.";
-        try {
-          const d = await res.json();
-          if (d?.message) msg = d.message;
-        } catch {}
-        throw new Error(msg);
-      }
       setStep("success");
     } catch (err: any) {
       setError(err?.message || "Failed to reset password. Please try again.");
@@ -151,18 +128,24 @@ export default function ResetPasswordPage() {
 
   if (step === "success") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-2 text-center">
-            <div className="flex justify-center">
-              <CheckCircle className="h-12 w-12 text-green-600" />
+      <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4'>
+        <Card className='w-full max-w-md'>
+          <CardHeader className='space-y-2 text-center'>
+            <div className='flex justify-center'>
+              <CheckCircle className='h-12 w-12 text-green-600' />
             </div>
-            <CardTitle className="text-2xl">Password Reset Successful</CardTitle>
-            <CardDescription>Your password has been reset successfully</CardDescription>
+            <CardTitle className='text-2xl'>
+              Password Reset Successful
+            </CardTitle>
+            <CardDescription>
+              Your password has been reset successfully
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">You can now login with your new password.</p>
-            <Button onClick={() => router.push("/login")} className="w-full">
+          <CardContent className='space-y-4'>
+            <p className='text-sm text-muted-foreground'>
+              You can now login with your new password.
+            </p>
+            <Button onClick={() => router.push("/login")} className='w-full'>
               Back to Login
             </Button>
           </CardContent>
@@ -172,10 +155,10 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <CardTitle className="text-2xl">
+    <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4'>
+      <Card className='w-full max-w-md'>
+        <CardHeader className='space-y-2 text-center'>
+          <CardTitle className='text-2xl'>
             {step === "email" && "Reset Password"}
             {step === "otp" && "Verify OTP"}
             {step === "password" && "Set New Password"}
@@ -189,29 +172,29 @@ export default function ResetPasswordPage() {
         <CardContent>
           {/* Email */}
           {step === "email" && (
-            <form onSubmit={handleEmailSubmit} className="space-y-6">
+            <form onSubmit={handleEmailSubmit} className='space-y-6'>
               {error && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <div className='flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
+                  <AlertCircle className='h-4 w-4' />
                   {error}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className='space-y-2'>
+                <Label htmlFor='email'>Email Address</Label>
+                <div className='relative'>
+                  <Mail className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@example.com"
+                    id='email'
+                    type='email'
+                    placeholder='admin@example.com'
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
+                    className='pl-10'
                     required
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type='submit' className='w-full' disabled={isLoading}>
                 {isLoading ? "Sending OTP..." : "Send OTP"}
               </Button>
             </form>
@@ -219,49 +202,55 @@ export default function ResetPasswordPage() {
 
           {/* OTP */}
           {step === "otp" && (
-            <form onSubmit={handleOtpSubmit} className="space-y-6">
+            <form onSubmit={handleOtpSubmit} className='space-y-6'>
               {error && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <div className='flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
+                  <AlertCircle className='h-4 w-4' />
                   {error}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="otp">Enter OTP</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='otp'>Enter OTP</Label>
                 <Input
-                  id="otp"
-                  type="text"
-                  placeholder="000000"
+                  id='otp'
+                  type='text'
+                  placeholder='000000'
                   value={otp}
                   onChange={(e) =>
                     setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
                   }
                   maxLength={6}
-                  className="text-center text-2xl tracking-widest"
+                  className='text-center text-2xl tracking-widest'
                   required
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className='text-xs text-muted-foreground'>
                   {otpTimer > 0
-                    ? `OTP expires in ${Math.floor(otpTimer / 60)}:${(otpTimer % 60)
+                    ? `OTP expires in ${Math.floor(otpTimer / 60)}:${(
+                        otpTimer % 60
+                      )
                         .toString()
                         .padStart(2, "0")}`
                     : "OTP expired"}
                 </p>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading || otpTimer <= 0}>
+              <Button
+                type='submit'
+                className='w-full'
+                disabled={isLoading || otpTimer <= 0}
+              >
                 {isLoading ? "Verifying..." : "Verify OTP"}
               </Button>
               <Button
-                type="button"
-                variant="outline"
-                className="w-full bg-transparent"
+                type='button'
+                variant='outline'
+                className='w-full bg-transparent'
                 onClick={() => {
                   setStep("email");
                   setOtp("");
                   setError("");
                 }}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className='mr-2 h-4 w-4' />
                 Back
               </Button>
             </form>
@@ -269,51 +258,53 @@ export default function ResetPasswordPage() {
 
           {/* New Password */}
           {step === "password" && (
-            <form onSubmit={handlePasswordSubmit} className="space-y-6">
+            <form onSubmit={handlePasswordSubmit} className='space-y-6'>
               {error && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <div className='flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
+                  <AlertCircle className='h-4 w-4' />
                   {error}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className='space-y-2'>
+                <Label htmlFor='newPassword'>New Password</Label>
+                <div className='relative'>
+                  <Lock className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
                   <Input
-                    id="newPassword"
-                    type="password"
-                    placeholder="••••••••"
+                    id='newPassword'
+                    type='password'
+                    placeholder='••••••••'
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="pl-10"
+                    className='pl-10'
                     required
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
+                <p className='text-xs text-muted-foreground'>
+                  Minimum 8 characters
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className='space-y-2'>
+                <Label htmlFor='confirmPassword'>Confirm Password</Label>
+                <div className='relative'>
+                  <Lock className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
                   <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
+                    id='confirmPassword'
+                    type='password'
+                    placeholder='••••••••'
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10"
+                    className='pl-10'
                     required
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type='submit' className='w-full' disabled={isLoading}>
                 {isLoading ? "Resetting..." : "Reset Password"}
               </Button>
               <Button
-                type="button"
-                variant="outline"
-                className="w-full bg-transparent"
+                type='button'
+                variant='outline'
+                className='w-full bg-transparent'
                 onClick={() => {
                   setStep("otp");
                   setNewPassword("");
@@ -321,7 +312,7 @@ export default function ResetPasswordPage() {
                   setError("");
                 }}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className='mr-2 h-4 w-4' />
                 Back
               </Button>
             </form>

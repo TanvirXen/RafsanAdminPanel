@@ -57,9 +57,13 @@ function Sidebar({
 
       <nav className='flex-1 space-y-1 px-3 py-4'>
         {navigation.map((item) => {
+          // ✅ Only mark Dashboard active on EXACT "/admin"
           const active =
-            currentPath === item.href ||
-            currentPath.startsWith(item.href + "/");
+            item.href === "/admin"
+              ? currentPath === "/admin"
+              : currentPath === item.href ||
+                currentPath.startsWith(item.href + "/");
+
           return (
             <Link
               key={item.name}
@@ -107,7 +111,6 @@ export default function AdminLayout({
       <div className='flex h-screen items-center justify-center'>
         <div className='text-center'>
           <div className='mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent'></div>
-          <p className='text-muted-foreground'>Loading...</p>
         </div>
       </div>
     );

@@ -131,7 +131,6 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 text-center text-xs text-muted-foreground">
-            <p>Demo credentials: any email and password</p>
           </div>
         </CardContent>
       </Card>
