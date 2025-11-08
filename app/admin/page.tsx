@@ -1,31 +1,99 @@
-// app/admin/page.tsx (or the file you showed)
+// app/admin/page.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import {
-  Film, Calendar, Users, CreditCard, TrendingUp, Award, Database, Activity, LogOut,
+  Film,
+  Calendar,
+  Users,
+  CreditCard,
+  TrendingUp,
+  Award,
+  Database,
+  Activity,
+  LogOut,
 } from "lucide-react";
+import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch"; // uses your auth token automatically
 
-const stats = [
-  { name: "Total Shows", value: "24", icon: Film, change: "+3 this month" },
-  { name: "Active Events", value: "12", icon: Calendar, change: "5 upcoming" },
-  { name: "Registrations", value: "1,429", icon: Users, change: "+12% from last month" },
-  { name: "Revenue", value: "$45,231", icon: CreditCard, change: "+8% from last month" },
-] as const;
-
-const recentActivity = [
-  { action: "New show added", item: "Breaking Boundaries", time: "2 hours ago", type: "show" },
-  { action: "Event published", item: "Summer Festival 2025", time: "5 hours ago", type: "event" },
-  { action: "Registration received", item: "Tech Conference", time: "1 day ago", type: "registration" },
-  { action: "Payment processed", item: "$299.00", time: "1 day ago", type: "payment" },
-] as const;
+type DashboardSummary = {
+  totals: {
+    shows: number;
+    events: number;
+    registrations: number;
+    revenue: number;
+    upcomingEvents?: number;
+  };
+  recent: Array<{
+    action: string;
+    item: string;
+    time: string; // already humanized from server
+    type: "show" | "event" | "registration" | "payment";
+  }>;
+};
 
 export default function AdminDashboard() {
   const { user: me, isLoading, logout } = useAuth({ redirectOnUnauthed: true });
+
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await apiFetch<DashboardSummary>(apiList.dashboard.summary);
+        setSummary(j);
+      } catch (e) {
+        // non-fatal for the page; just keep the placeholders
+      } finally {
+        setLoadingSummary(false);
+      }
+    })();
+  }, []);
+
+  const stats = useMemo(() => {
+    const t = summary?.totals;
+    return [
+      {
+        name: "Total Shows",
+        value: t ? String(t.shows) : "—",
+        icon: Film,
+        change: t ? "" : "",
+      },
+      {
+        name: "Active Events",
+        value: t ? String(t.events) : "—",
+        icon: Calendar,
+        change: t?.upcomingEvents ? `${t.upcomingEvents} upcoming` : "",
+      },
+      {
+        name: "Registrations",
+        value: t ? String(t.registrations) : "—",
+        icon: Users,
+        change: "",
+      },
+      {
+        name: "Revenue",
+        value: t
+          ? (t.revenue || 0).toLocaleString(undefined, {
+              style: "currency",
+              currency: "USD",
+              maximumFractionDigits: 2,
+            })
+          : "—",
+        icon: CreditCard,
+        change: "",
+      },
+    ] as const;
+  }, [summary]);
 
   if (isLoading) {
     return (
@@ -47,7 +115,8 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back{me?.name ? `, ${me.name}` : ""}! Here's what's happening today.
+            Welcome back{me?.name ? `, ${me.name}` : ""}! Here's what's
+            happening today.
           </p>
         </div>
         <button
@@ -65,12 +134,18 @@ export default function AdminDashboard() {
         {stats.map((stat) => (
           <Card key={stat.name}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.name}</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                {stat.name}
+              </CardTitle>
               <stat.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">{stat.change}</p>
+              <div className="text-2xl font-semibold">
+                {loadingSummary ? "…" : stat.value}
+              </div>
+              {stat.change ? (
+                <p className="text-xs text-muted-foreground">{stat.change}</p>
+              ) : null}
             </CardContent>
           </Card>
         ))}
@@ -85,18 +160,27 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
+              {(summary?.recent || []).map((activity, index) => (
                 <div key={index} className="flex items-start gap-4">
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
                     <Activity className="h-4 w-4" />
                   </div>
                   <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">{activity.action}</p>
-                    <p className="text-sm text-muted-foreground">{activity.item}</p>
+                    <p className="text-sm font-medium leading-none">
+                      {activity.action}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {activity.item}
+                    </p>
                   </div>
-                  <div className="text-xs text-muted-foreground">{activity.time}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {activity.time}
+                  </div>
                 </div>
               ))}
+              {!summary?.recent?.length && (
+                <div className="text-sm text-muted-foreground">No recent activity</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -113,28 +197,28 @@ export default function AdminDashboard() {
                   <Film className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Total Episodes</span>
                 </div>
-                <span className="text-sm font-semibold">156</span>
+                <span className="text-sm font-semibold">—</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Total Reels</span>
                 </div>
-                <span className="text-sm font-semibold">89</span>
+                <span className="text-sm font-semibold">—</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Award className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Notable Events</span>
                 </div>
-                <span className="text-sm font-semibold">34</span>
+                <span className="text-sm font-semibold">—</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Brands</span>
                 </div>
-                <span className="text-sm font-semibold">18</span>
+                <span className="text-sm font-semibold">—</span>
               </div>
             </div>
           </CardContent>

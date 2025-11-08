@@ -17,7 +17,9 @@ const withQuery = (url: string, params?: Record<string, string | number | boolea
 
 const apiList = {
   base: API_BASE,
-
+ dashboard: {
+    summary: path("dashboard", "summary"),
+  },
   auth: {
     register: path("auth", "register"),
     login: path("auth", "login"),
