@@ -7,8 +7,8 @@ import "react-toastify/dist/ReactToastify.css"; // <-- add this
 import ToastMount from "./ToastMount"; // <-- add this
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
+  title: "Admin Panel",
+  description: "Admin Panel for Rafsan's Portfolio Website",
   generator: "v0.app",
 };
 
