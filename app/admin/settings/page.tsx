@@ -3,6 +3,7 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
@@ -125,10 +126,9 @@ export default function SettingsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.settings.get, {
-          
-        });
-        const j = await res.json();
+        const j = await apiFetch<{ setting?: SettingsDto; data?: SettingsDto }>(
+          apiList.settings.get
+        );
         const s: SettingsDto = j.setting || j.data || {};
         if (s.socialLinks)
           setSocialLinks((prev) => ({ ...prev, ...s.socialLinks }));
@@ -137,8 +137,8 @@ export default function SettingsPage() {
         if (s.aboutSection)
           setAboutSection((prev) => ({ ...prev, ...s.aboutSection }));
         if (s.quickFacts) setQuickFacts(s.quickFacts);
-      } catch {
-        toast.error("Failed to load settings");
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to load settings");
       } finally {
         setLoading(false);
       }
@@ -147,14 +147,13 @@ export default function SettingsPage() {
 
   /* ---------- helpers ---------- */
   const putSettings = async (payload: SettingsDto) => {
-    const res = await fetch(apiList.settings.update, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      
-      body: JSON.stringify(payload),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.message || "Failed to save settings");
+    const j = await apiFetch<{ setting?: SettingsDto }>(
+      apiList.settings.update,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
     // normalize back from server response
     const s: SettingsDto = j.setting || {};
     if (s.socialLinks)
@@ -179,7 +178,7 @@ export default function SettingsPage() {
       await putSettings({ socialLinks });
       toast.success("Social links saved");
     } catch (e: any) {
-      toast.error(e.message || "Save failed");
+      toast.error(e?.message || "Save failed");
     } finally {
       setSavingSocial(false);
     }
@@ -198,7 +197,7 @@ export default function SettingsPage() {
       await putSettings({ heroSection });
       toast.success("Hero section saved");
     } catch (e: any) {
-      toast.error(e.message || "Save failed");
+      toast.error(e?.message || "Save failed");
     } finally {
       setSavingHero(false);
     }
@@ -217,7 +216,7 @@ export default function SettingsPage() {
       await putSettings({ aboutSection });
       toast.success("About section saved");
     } catch (e: any) {
-      toast.error(e.message || "Save failed");
+      toast.error(e?.message || "Save failed");
     } finally {
       setSavingAbout(false);
     }
@@ -247,7 +246,6 @@ export default function SettingsPage() {
   const handleSaveQuickFacts = async () => {
     try {
       setSavingFacts(true);
-      // minimal validation before sending (backend also validates)
       for (const f of quickFacts) {
         if (!f.id || !f.title || !f.icon || !f.description) {
           toast.error("Each quick fact needs id, title, icon, and description");
@@ -258,7 +256,7 @@ export default function SettingsPage() {
       await putSettings({ quickFacts });
       toast.success("Quick facts saved");
     } catch (e: any) {
-      toast.error(e.message || "Save failed");
+      toast.error(e?.message || "Save failed");
     } finally {
       setSavingFacts(false);
     }
