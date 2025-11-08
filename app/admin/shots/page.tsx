@@ -57,7 +57,7 @@ export default function ShotsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.shots.list, { credentials: "include" });
+        const res = await fetch(apiList.shots.list, {  });
         const j = await res.json();
         setShots(
           (j.shots || []).sort((a: Shot, b: Shot) => a.sequence - b.sequence)
@@ -90,7 +90,7 @@ export default function ShotsPage() {
 
     const res = await fetch(apiList.shots.delete(shot._id), {
       method: "DELETE",
-      credentials: "include",
+      
     });
     if (res.ok) {
       setShots((prev) => prev.filter((s) => s._id !== shot._id));
@@ -115,7 +115,7 @@ export default function ShotsPage() {
       const res = await fetch(apiList.shots.update(editingShot._id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
@@ -134,7 +134,7 @@ export default function ShotsPage() {
       const res = await fetch(apiList.shots.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
@@ -172,7 +172,7 @@ export default function ShotsPage() {
         fetch(apiList.shots.update(a._id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
+          
           body: JSON.stringify({
             sequence: swapped.find((x) => x._id === a._id)?.sequence,
           }),
@@ -180,7 +180,7 @@ export default function ShotsPage() {
         fetch(apiList.shots.update(b._id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
+          
           body: JSON.stringify({
             sequence: swapped.find((x) => x._id === b._id)?.sequence,
           }),

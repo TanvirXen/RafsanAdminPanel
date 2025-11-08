@@ -4,7 +4,7 @@ export async function apiFetch<T = any>(
   init: RequestInit = {}
 ): Promise<T> {
   const res = await fetch(url, {
-    credentials: "include",                // <- IMPORTANT
+                   // <- IMPORTANT
     headers: { "Content-Type": "application/json", ...(init.headers || {}) },
     ...init,
   });

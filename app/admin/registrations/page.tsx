@@ -58,7 +58,7 @@ export default function RegistrationsPage() {
         status: statusFilter === "all" ? undefined : statusFilter,
         limit: 100,
       });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, {  });
       const j: ApiListResponse = await res.json();
       if (!res.ok) throw new Error((j as any)?.message || "Failed to load registrations");
       setRows(j.registrations || []);
@@ -85,7 +85,7 @@ export default function RegistrationsPage() {
     const res = await fetch(apiList.registrations.update(id), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      
       body: JSON.stringify({ status: "approved" }),
     });
     const j = await res.json().catch(() => ({}));
@@ -100,7 +100,7 @@ export default function RegistrationsPage() {
     const res = await fetch(apiList.registrations.update(id), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      
       body: JSON.stringify({ status: "rejected" }),
     });
     const j = await res.json().catch(() => ({}));
@@ -115,7 +115,7 @@ export default function RegistrationsPage() {
     if (!confirm(`Delete registration for "${reg.fields?.name || reg.fields?.Name || "attendee"}"?`)) return;
     const res = await fetch(apiList.registrations.delete(reg._id), {
       method: "DELETE",
-      credentials: "include",
+      
     });
     if (res.ok) {
       setRows((prev) => prev.filter((r) => r._id !== reg._id));

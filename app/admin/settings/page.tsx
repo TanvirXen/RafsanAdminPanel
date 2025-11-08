@@ -126,7 +126,7 @@ export default function SettingsPage() {
     (async () => {
       try {
         const res = await fetch(apiList.settings.get, {
-          credentials: "include",
+          
         });
         const j = await res.json();
         const s: SettingsDto = j.setting || j.data || {};
@@ -150,7 +150,7 @@ export default function SettingsPage() {
     const res = await fetch(apiList.settings.update, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      
       body: JSON.stringify(payload),
     });
     const j = await res.json().catch(() => ({}));

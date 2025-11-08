@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
+import { useAuth } from "@/hooks/use-auth";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -13,10 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EventForm } from "@/components/admin/forms/event-form";
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar, MapPin, Grid3x3, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
-import Image from "next/image";
 
 interface Brand {
   _id: string;
@@ -34,7 +35,6 @@ interface Event {
   description: string;
   imageLinkBg?: string;
   imageLinkOverlay?: string;
-  // Can be ObjectIds or populated objects depending on the API response
   brands?: Array<
     string | { _id: string; brandName: string; imageLink?: string }
   >;
@@ -42,11 +42,15 @@ interface Event {
 }
 
 export default function EventsPage() {
+  // Enforce auth + redirect to /login if unauthenticated
+  const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
+
   const [events, setEvents] = useState<Event[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
-  // brands master list from API
+  // brands master list
   const [brands, setBrands] = useState<Brand[]>([]);
 
   // ---------- confirm dialog state ----------
@@ -73,31 +77,28 @@ export default function EventsPage() {
 
   // ---------- load ----------
   useEffect(() => {
+    if (authLoading) return;
     (async () => {
       try {
-        const [evRes, brRes] = await Promise.all([
-          fetch(apiList.events.list, { credentials: "include" }),
-          fetch(apiList.brands.list, { credentials: "include" }),
-        ]);
-        const evJson = await evRes.json();
-        const brJson = await brRes.json();
-        setEvents(evJson.events || evJson.data || []);
-        setBrands(brJson.brands || []);
-      } catch {
-        toast.error("Failed to load events/brands");
+        const [{ events: evs = [], data: d }, { brands: brs = [] }] =
+          await Promise.all([
+            apiFetch<{ events?: Event[]; data?: Event[] }>(apiList.events.list),
+            apiFetch<{ brands: Brand[] }>(apiList.brands.list),
+          ]);
+        setEvents(evs?.length ? evs : d || []);
+        setBrands(brs);
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to load events/brands");
       }
     })();
-  }, []);
+  }, [authLoading]);
 
   // Resolve associated brand objects for the currently edited event
   const editingEventBrands: Brand[] = useMemo(() => {
     if (!editingEvent?.brands?.length) return [];
     return editingEvent.brands
       .map((b) => {
-        if (typeof b === "string") {
-          return brands.find((x) => x._id === b);
-        }
-        // populated object
+        if (typeof b === "string") return brands.find((x) => x._id === b);
         const fromId = brands.find((x) => x._id === (b as any)._id);
         return (
           fromId ||
@@ -128,17 +129,12 @@ export default function EventsPage() {
       `Are you sure you want to delete "${event.title}"?`
     );
     if (!ok) return;
-
-    const res = await fetch(apiList.events.delete(event._id), {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (res.ok) {
+    try {
+      await apiFetch(apiList.events.delete(event._id), { method: "DELETE" });
       setEvents((prev) => prev.filter((e) => e._id !== event._id));
       toast.success("Event deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete event");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete event");
     }
   };
 
@@ -148,38 +144,34 @@ export default function EventsPage() {
       date: (data.date || []).map((d) => new Date(d as string).toISOString()),
     };
 
-    if (editingEvent) {
-      const res = await fetch(apiList.events.update(editingEvent._id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
+    try {
+      if (editingEvent) {
+        const j = await apiFetch<{ event: Event }>(
+          apiList.events.update(editingEvent._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          }
+        );
         setEvents((prev) =>
           prev.map((e) => (e._id === editingEvent._id ? j.event : e))
         );
         toast.success("Event updated");
         setIsDialogOpen(false);
       } else {
-        toast.error(j.message || "Failed to update event");
-      }
-    } else {
-      const res = await fetch(apiList.events.create, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) {
+        const j = await apiFetch<{ event: Event }>(apiList.events.create, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
         setEvents((prev) => [j.event, ...prev]);
         toast.success("Event created");
         setIsDialogOpen(false);
-      } else {
-        toast.error(j.message || "Failed to create event");
       }
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          (editingEvent ? "Failed to update event" : "Failed to create event")
+      );
     }
   };
 
@@ -260,70 +252,125 @@ export default function EventsPage() {
     },
   ];
 
+  // loading skeleton while auth resolves
+  if (authLoading) {
+    return (
+      <div className='p-8'>
+        <div className='mb-2 h-6 w-40 animate-pulse rounded bg-muted' />
+        <div className='h-4 w-64 animate-pulse rounded bg-muted' />
+        <div className='mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className='h-28 rounded-lg bg-muted animate-pulse' />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className='flex flex-col gap-6 p-6 lg:p-8'>
-      <PageHeader
-        title='Events'
-        description='Manage events, registrations, and attendees'
-      />
+      <div className='flex items-center justify-between'>
+        <PageHeader
+          title='Events'
+          description='Manage events, registrations, and attendees'
+        />
+        <div className='flex items-center gap-2'>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("table")}
+          >
+            <List className='h-4 w-4' />
+          </Button>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setViewMode("grid")}
+          >
+            <Grid3x3 className='h-4 w-4' />
+          </Button>
+        </div>
+      </div>
 
-      <DataTable
-        data={events}
-        columns={columns}
-        onAdd={handleAdd}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        searchPlaceholder='Search events...'
-      />
+      {viewMode === "table" ? (
+        <DataTable
+          data={events}
+          columns={columns}
+          onAdd={handleAdd}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          searchPlaceholder='Search events...'
+        />
+      ) : (
+        <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
+          {events.map((ev) => (
+            <div key={ev._id} className='rounded-lg border p-4'>
+              <div className='flex items-start justify-between'>
+                <div>
+                  <div className='text-lg font-semibold'>{ev.title}</div>
+                  <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
+                    <MapPin className='h-3 w-3' />
+                    {ev.venue}
+                  </div>
+                </div>
+                <Badge variant={getTypeColor(ev.type)}>
+                  {ev.type.replace(/_/g, " ")}
+                </Badge>
+              </div>
+              <div className='mt-3 text-sm text-muted-foreground'>
+                {ev.description}
+              </div>
+              <div className='mt-3 flex items-center gap-2 text-sm'>
+                <Calendar className='h-4 w-4' />
+                {ev.date?.length > 1
+                  ? `${ev.date.length} dates`
+                  : ev.date?.[0]
+                  ? new Date(ev.date[0]).toLocaleDateString()
+                  : "-"}
+              </div>
+              <div className='mt-4 flex gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => handleEdit(ev)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => handleDelete(ev)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+          <div className='flex items-center justify-center rounded-lg border border-dashed p-6'>
+            <Button variant='ghost' onClick={handleAdd}>
+              Add New Event
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto p-0'>
+        {/* outer: width + clip overflow */}
+        <DialogContent className='w-[95vw] sm:max-w-3xl p-0 overflow-hidden'>
+          {/* sticky header stays put */}
           <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
             <DialogTitle>
               {editingEvent ? "Edit Event" : "Add New Event"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className='px-6 pt-5 pb-2'>
-            {/* Associated brands preview (read-only) */}
-            {/* <div className='mb-4'>
-              <div className='text-sm font-medium mb-2'>Associated brands</div>
-              {editingEventBrands.length ? (
-                <div className='flex flex-wrap gap-2'>
-                  {editingEventBrands.map((b) => (
-                    <span
-                      key={b._id}
-                      className='inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs'
-                      title={b.brandName}
-                    >
-                      {b.imageLink ? (
-                        <Image
-                          src={b.imageLink}
-                          alt={b.brandName}
-                          width={16}
-                          height={16}
-                          className='rounded'
-                        />
-                      ) : null}
-                      {b.brandName}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className='text-xs text-muted-foreground'>
-                  No brands linked yet.
-                </div>
-              )}
-            </div> */}
-
-            {/* The actual form */}
+          {/* inner: the ONLY scroll area */}
+          <div className='px-6 pt-5 pb-2 max-h-[calc(90vh-64px)] overflow-y-auto'>
             <EventForm
               initialData={editingEvent || undefined}
-              brands={brands} // ⬅️ provide master brand list
-              onBrandsChange={(
-                ids // ⬅️ keep preview in sync while editing
-              ) =>
+              brands={brands}
+              onBrandsChange={(ids) =>
                 setEditingEvent((prev) =>
                   prev ? { ...prev, brands: ids } : prev
                 )

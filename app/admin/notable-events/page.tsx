@@ -55,7 +55,7 @@ export default function NotableEventsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.notableEvents.list, { credentials: "include" });
+        const res = await fetch(apiList.notableEvents.list, {  });
         const j = await res.json();
         setEvents(j.events || []);
       } catch {
@@ -81,7 +81,7 @@ export default function NotableEventsPage() {
 
     const res = await fetch(apiList.notableEvents.delete(event._id), {
       method: "DELETE",
-      credentials: "include",
+      
     });
     if (res.ok) {
       setEvents((prev) => prev.filter((e) => e._id !== event._id));
@@ -104,7 +104,7 @@ export default function NotableEventsPage() {
       const res = await fetch(apiList.notableEvents.update(editingEvent._id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
@@ -120,7 +120,7 @@ export default function NotableEventsPage() {
       const res = await fetch(apiList.notableEvents.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));

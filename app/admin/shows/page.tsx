@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
+import { useAuth } from "@/hooks/use-auth";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -77,6 +79,9 @@ interface Reel {
 }
 
 export default function ShowsPage() {
+  // Enforce auth + redirect to /login if unauthenticated
+  const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
+
   const [shows, setShows] = useState<Show[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -102,7 +107,9 @@ export default function ShowsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState<string>("");
   const [confirmDesc, setConfirmDesc] = useState<string>("");
-  const confirmResolveRef = useRef<((val: boolean) => void) | undefined>(undefined);
+  const confirmResolveRef = useRef<((val: boolean) => void) | undefined>(
+    undefined
+  );
 
   const askConfirm = (title: string, desc: string) =>
     new Promise<boolean>((resolve) => {
@@ -132,62 +139,66 @@ export default function ShowsPage() {
 
   /* ------------------------------ load data ------------------------------ */
   useEffect(() => {
+    // Wait for auth check to settle first to avoid unnecessary requests
+    if (authLoading) return;
+
     (async () => {
-      // shows
-      const sRes = await fetch(apiList.shows.list, { credentials: "include" });
-      const sJson = await sRes.json();
-      setShows(sJson.shows || []);
+      try {
+        // shows
+        const sJson = await apiFetch<{ shows: Show[] }>(apiList.shows.list);
+        const showsArr = sJson.shows || [];
+        setShows(showsArr);
 
-      // seasons
-      const seasonRes = await fetch(`${apiList.shows.seasons}`, {
-        credentials: "include",
-      });
-      const seasonJson = await seasonRes.json();
-      const seasonsWithTitle: Season[] = (seasonJson.seasons || []).map(
-        (se: Season) => ({
-          ...se,
-          showTitle: sJson.shows?.find((x: Show) => x._id === se.showId)?.title,
-        })
-      );
-      setSeasons(seasonsWithTitle);
+        // seasons
+        const seasonJson = await apiFetch<{ seasons: Season[] }>(
+          apiList.shows.seasons
+        );
+        const seasonsWithTitle: Season[] = (seasonJson.seasons || []).map(
+          (se: Season) => ({
+            ...se,
+            showTitle: showsArr.find((x) => x._id === se.showId)?.title,
+          })
+        );
+        setSeasons(seasonsWithTitle);
 
-      // episodes
-      const epRes = await fetch(`${apiList.shows.episodes}`, {
-        credentials: "include",
-      });
-      const epJson = await epRes.json();
-      const episodesWithTitles: Episode[] = (epJson.episodes || []).map(
-        (e: Episode) => ({
-          ...e,
-          showTitle: sJson.shows?.find((x: Show) => x._id === e.showId)?.title,
-          seasonTitle: seasonsWithTitle.find((x) => x._id === e.seasonId)
-            ?.title,
-        })
-      );
-      setEpisodes(episodesWithTitles);
+        // episodes
+        const epJson = await apiFetch<{ episodes: Episode[] }>(
+          apiList.shows.episodes
+        );
+        const episodesWithTitles: Episode[] = (epJson.episodes || []).map(
+          (e: Episode) => ({
+            ...e,
+            showTitle: showsArr.find((x) => x._id === e.showId)?.title,
+            seasonTitle: seasonsWithTitle.find((x) => x._id === e.seasonId)
+              ?.title,
+          })
+        );
+        setEpisodes(episodesWithTitles);
 
-      // reels
-      const rRes = await fetch(`${apiList.shows.reels}`, {
-        credentials: "include",
-      });
-      const rJson = await rRes.json();
-      const reelsWithTitle: Reel[] = (rJson.reels || []).map((r: Reel) => ({
-        ...r,
-        showTitle: sJson.shows?.find((x: Show) => x._id === r.showId)?.title,
-      }));
-      setReels(reelsWithTitle);
+        // reels
+        const rJson = await apiFetch<{ reels: Reel[] }>(apiList.shows.reels);
+        const reelsWithTitle: Reel[] = (rJson.reels || []).map((r: Reel) => ({
+          ...r,
+          showTitle: showsArr.find((x) => x._id === r.showId)?.title,
+        }));
+        setReels(reelsWithTitle);
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to load data");
+      }
     })();
-  }, []);
+  }, [authLoading]);
 
   /* ------------------------------ filters ------------------------------ */
   const filteredSeasons =
     seasonFilter === "all"
       ? seasons
       : seasons.filter((s) => s.showId === seasonFilter);
+
   const filteredEpisodes =
     episodeFilter === "all"
       ? episodes
       : episodes.filter((e) => e.showId === episodeFilter);
+
   const filteredReels =
     reelFilter === "all" ? reels : reels.filter((r) => r.showId === reelFilter);
 
@@ -211,56 +222,51 @@ export default function ShowsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(apiList.shows.delete(show._id), {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (res.ok) {
+    try {
+      await apiFetch<{ ok?: true }>(apiList.shows.delete(show._id), {
+        method: "DELETE",
+      });
+
       setShows((prev) => prev.filter((s) => s._id !== show._id));
       // cascade remove client-side
       setSeasons((prev) => prev.filter((s) => s.showId !== show._id));
       setEpisodes((prev) => prev.filter((e) => e.showId !== show._id));
       setReels((prev) => prev.filter((r) => r.showId !== show._id));
       toast.success("Show deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete show");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete show");
     }
   };
 
   const handleSave = async (data: Partial<Show>) => {
-    if (editingShow) {
-      const res = await fetch(apiList.shows.update(editingShow._id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      const j = await res.json();
-      if (res.ok) {
+    try {
+      if (editingShow) {
+        const j = await apiFetch<{ show: Show }>(
+          apiList.shows.update(editingShow._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(data),
+          }
+        );
         setShows((prev) =>
           prev.map((s) => (s._id === editingShow._id ? j.show : s))
         );
         toast.success("Show updated");
       } else {
-        toast.error(j.message || "Failed to update show");
-      }
-    } else {
-      const res = await fetch(apiList.shows.create, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      const j = await res.json();
-      if (res.ok) {
+        const j = await apiFetch<{ show: Show }>(apiList.shows.create, {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
         setShows((prev) => [j.show, ...prev]);
         toast.success("Show created");
-      } else {
-        toast.error(j.message || "Failed to create show");
       }
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          (editingShow ? "Failed to update show" : "Failed to create show")
+      );
     }
-    setIsDialogOpen(false);
   };
 
   /* ------------------------------ seasons CRUD ------------------------------ */
@@ -283,14 +289,11 @@ export default function ShowsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(
-      apiList.shows.deleteSeason(season.showId, season._id),
-      {
+    try {
+      await apiFetch(apiList.shows.deleteSeason(season.showId, season._id), {
         method: "DELETE",
-        credentials: "include",
-      }
-    );
-    if (res.ok) {
+      });
+
       setSeasons((prev) => prev.filter((s) => s._id !== season._id));
       // also drop episodes of this season
       setEpisodes((prev) => prev.filter((e) => e.seasonId !== season._id));
@@ -303,27 +306,23 @@ export default function ShowsPage() {
         )
       );
       toast.success("Season deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete season");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete season");
     }
   };
 
   const handleSaveSeason = async (data: Partial<Season>) => {
     if (!data.showId) return toast.error("Show is required for a season");
 
-    if (editingSeason) {
-      const res = await fetch(
-        apiList.shows.updateSeason(editingSeason.showId, editingSeason._id),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(pick(data, ["title", "description"])),
-        }
-      );
-      const j = await res.json();
-      if (res.ok) {
+    try {
+      if (editingSeason) {
+        const j = await apiFetch<{ season: Season }>(
+          apiList.shows.updateSeason(editingSeason.showId, editingSeason._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(pick(data, ["title", "description"])),
+          }
+        );
         const showTitle = showMap.get(j.season.showId)?.title;
         setSeasons((prev) =>
           prev.map((s) =>
@@ -332,26 +331,20 @@ export default function ShowsPage() {
         );
         toast.success("Season updated");
       } else {
-        toast.error(j.message || "Failed to update season");
-      }
-    } else {
-      const res = await fetch(apiList.shows.createSeason(data.showId), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(pick(data, ["title", "description"])),
-      });
-      const j = await res.json();
-      if (res.ok) {
+        const j = await apiFetch<{ season: Season }>(
+          apiList.shows.createSeason(String(data.showId)),
+          {
+            method: "POST",
+            body: JSON.stringify(pick(data, ["title", "description"])),
+          }
+        );
         const showTitle = showMap.get(String(data.showId))?.title;
         setSeasons((prev) => [{ ...j.season, showTitle }, ...prev]);
+
         // bump season count on the show
-        const count = await fetch(
-          apiList.shows.seasonsByShow(String(data.showId)),
-          {
-            credentials: "include",
-          }
-        ).then((r) => r.json());
+        const count = await apiFetch<{ seasons: Season[] }>(
+          apiList.shows.seasonsByShow(String(data.showId))
+        );
         setShows((prev) =>
           prev.map((sh) =>
             sh._id === data.showId
@@ -360,11 +353,16 @@ export default function ShowsPage() {
           )
         );
         toast.success("Season created");
-      } else {
-        toast.error(j.message || "Failed to create season");
       }
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          (editingSeason
+            ? "Failed to update season"
+            : "Failed to create season")
+      );
     }
-    setIsDialogOpen(false);
   };
 
   /* ------------------------------ episodes CRUD ------------------------------ */
@@ -387,20 +385,19 @@ export default function ShowsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(
-      apiList.shows.deleteEpisode(
-        episode.showId,
-        episode.seasonId,
-        episode._id
-      ),
-      { method: "DELETE", credentials: "include" }
-    );
-    if (res.ok) {
+    try {
+      await apiFetch(
+        apiList.shows.deleteEpisode(
+          episode.showId,
+          episode.seasonId,
+          episode._id
+        ),
+        { method: "DELETE" }
+      );
       setEpisodes((prev) => prev.filter((e) => e._id !== episode._id));
       toast.success("Episode deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete episode");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete episode");
     }
   };
 
@@ -408,24 +405,21 @@ export default function ShowsPage() {
     if (!data.showId || !data.seasonId)
       return toast.error("Show & Season are required for an episode");
 
-    if (editingEpisode) {
-      const res = await fetch(
-        apiList.shows.updateEpisode(
-          editingEpisode.showId,
-          editingEpisode.seasonId,
-          editingEpisode._id
-        ),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(
-            pick(data, ["title", "thumbnail", "link", "featured"])
+    try {
+      if (editingEpisode) {
+        const j = await apiFetch<{ episode: Episode }>(
+          apiList.shows.updateEpisode(
+            editingEpisode.showId,
+            editingEpisode.seasonId,
+            editingEpisode._id
           ),
-        }
-      );
-      const j = await res.json();
-      if (res.ok) {
+          {
+            method: "PATCH",
+            body: JSON.stringify(
+              pick(data, ["title", "thumbnail", "link", "featured"])
+            ),
+          }
+        );
         const showTitle = showMap.get(j.episode.showId)?.title;
         const seasonTitle = seasonMap.get(j.episode.seasonId)?.title;
         setEpisodes((prev) =>
@@ -437,22 +431,18 @@ export default function ShowsPage() {
         );
         toast.success("Episode updated");
       } else {
-        toast.error(j.message || "Failed to update episode");
-      }
-    } else {
-      const res = await fetch(
-        apiList.shows.createEpisode(String(data.showId), String(data.seasonId)),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(
-            pick(data, ["title", "thumbnail", "link", "featured"])
+        const j = await apiFetch<{ episode: Episode }>(
+          apiList.shows.createEpisode(
+            String(data.showId),
+            String(data.seasonId)
           ),
-        }
-      );
-      const j = await res.json();
-      if (res.ok) {
+          {
+            method: "POST",
+            body: JSON.stringify(
+              pick(data, ["title", "thumbnail", "link", "featured"])
+            ),
+          }
+        );
         const showTitle = showMap.get(String(data.showId))?.title;
         const seasonTitle = seasonMap.get(String(data.seasonId))?.title;
         setEpisodes((prev) => [
@@ -460,11 +450,16 @@ export default function ShowsPage() {
           ...prev,
         ]);
         toast.success("Episode created");
-      } else {
-        toast.error(j.message || "Failed to create episode");
       }
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          (editingEpisode
+            ? "Failed to update episode"
+            : "Failed to create episode")
+      );
     }
-    setIsDialogOpen(false);
   };
 
   /* ------------------------------ reels CRUD ------------------------------ */
@@ -487,11 +482,11 @@ export default function ShowsPage() {
     );
     if (!ok) return;
 
-    const res = await fetch(apiList.shows.deleteReel(reel.showId, reel._id), {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (res.ok) {
+    try {
+      await apiFetch(apiList.shows.deleteReel(reel.showId, reel._id), {
+        method: "DELETE",
+      });
+
       setReels((prev) => prev.filter((r) => r._id !== reel._id));
       // refresh show's reels count client-side
       setShows((prev) =>
@@ -502,29 +497,25 @@ export default function ShowsPage() {
         )
       );
       toast.success("Reel deleted");
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.message || "Failed to delete reel");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete reel");
     }
   };
 
   const handleSaveReel = async (data: Partial<Reel>) => {
     if (!data.showId) return toast.error("Show is required for a reel");
 
-    if (editingReel) {
-      const res = await fetch(
-        apiList.shows.updateReel(editingReel.showId, editingReel._id),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(
-            pick(data, ["title", "description", "thumbnail", "link"])
-          ),
-        }
-      );
-      const j = await res.json();
-      if (res.ok) {
+    try {
+      if (editingReel) {
+        const j = await apiFetch<{ reel: Reel }>(
+          apiList.shows.updateReel(editingReel.showId, editingReel._id),
+          {
+            method: "PATCH",
+            body: JSON.stringify(
+              pick(data, ["title", "description", "thumbnail", "link"])
+            ),
+          }
+        );
         const showTitle = showMap.get(j.reel.showId)?.title;
         setReels((prev) =>
           prev.map((r) =>
@@ -533,29 +524,22 @@ export default function ShowsPage() {
         );
         toast.success("Reel updated");
       } else {
-        toast.error(j.message || "Failed to update reel");
-      }
-    } else {
-      const res = await fetch(apiList.shows.createReel(String(data.showId)), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(
-          pick(data, ["title", "description", "thumbnail", "link"])
-        ),
-      });
-      const j = await res.json();
-      if (res.ok) {
+        const j = await apiFetch<{ reel: Reel }>(
+          apiList.shows.createReel(String(data.showId)),
+          {
+            method: "POST",
+            body: JSON.stringify(
+              pick(data, ["title", "description", "thumbnail", "link"])
+            ),
+          }
+        );
         const showTitle = showMap.get(String(data.showId))?.title;
         setReels((prev) => [{ ...j.reel, showTitle }, ...prev]);
 
         // bump reels count
-        const count = await fetch(
-          apiList.shows.reelsByShow(String(data.showId)),
-          {
-            credentials: "include",
-          }
-        ).then((r) => r.json());
+        const count = await apiFetch<{ reels: Reel[] }>(
+          apiList.shows.reelsByShow(String(data.showId))
+        );
         setShows((prev) =>
           prev.map((sh) =>
             sh._id === data.showId
@@ -564,11 +548,14 @@ export default function ShowsPage() {
           )
         );
         toast.success("Reel created");
-      } else {
-        toast.error(j.message || "Failed to create reel");
       }
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          (editingReel ? "Failed to update reel" : "Failed to create reel")
+      );
     }
-    setIsDialogOpen(false);
   };
 
   /* -------------------------------- tables -------------------------------- */
@@ -579,11 +566,7 @@ export default function ShowsPage() {
       label: "Seasons",
       render: (show: Show) => show.seasons ?? "-",
     },
-    {
-      key: "reels",
-      label: "Reels",
-      render: (show: Show) => show.reels ?? "-",
-    },
+    { key: "reels", label: "Reels", render: (show: Show) => show.reels ?? "-" },
     {
       key: "featured",
       label: "Featured",
@@ -654,6 +637,21 @@ export default function ShowsPage() {
       ),
     },
   ];
+
+  // simple loading skeleton while auth resolving
+  if (authLoading) {
+    return (
+      <div className='p-8'>
+        <div className='mb-2 h-6 w-40 animate-pulse rounded bg-muted' />
+        <div className='h-4 w-64 animate-pulse rounded bg-muted' />
+        <div className='mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className='h-28 rounded-lg bg-muted animate-pulse' />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='flex flex-col gap-6 p-6 lg:p-8'>

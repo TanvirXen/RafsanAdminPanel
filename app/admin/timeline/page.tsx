@@ -53,7 +53,7 @@ export default function TimelinePage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(apiList.timeline.list, { credentials: "include" });
+        const res = await fetch(apiList.timeline.list, {  });
         const j = await res.json();
         setTimeline(j.items || []);
       } catch {
@@ -79,7 +79,7 @@ export default function TimelinePage() {
 
     const res = await fetch(apiList.timeline.delete(item._id), {
       method: "DELETE",
-      credentials: "include",
+      
     });
     if (res.ok) {
       setTimeline((prev) => prev.filter((t) => t._id !== item._id));
@@ -102,7 +102,7 @@ export default function TimelinePage() {
       const res = await fetch(apiList.timeline.update(editingItem._id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
@@ -118,7 +118,7 @@ export default function TimelinePage() {
       const res = await fetch(apiList.timeline.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));

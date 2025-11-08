@@ -69,7 +69,7 @@ export default function BrandsPage() {
   /* load */
   useEffect(() => {
     (async () => {
-      const res = await fetch(apiList.brands.list, { credentials: "include" });
+      const res = await fetch(apiList.brands.list, {  });
       const j = await res.json();
       setBrands(j.brands || []);
     })();
@@ -95,7 +95,7 @@ export default function BrandsPage() {
 
     const res = await fetch(apiList.brands.delete(brand._id), {
       method: "DELETE",
-      credentials: "include",
+      
     });
     if (res.ok) {
       setBrands((prev) => prev.filter((b) => b._id !== brand._id));
@@ -112,7 +112,7 @@ export default function BrandsPage() {
       const res = await fetch(apiList.brands.update(editingBrand._id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(data),
       });
       const j = await res.json();
@@ -129,7 +129,7 @@ export default function BrandsPage() {
       const res = await fetch(apiList.brands.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        
         body: JSON.stringify(data),
       });
       const j = await res.json();
