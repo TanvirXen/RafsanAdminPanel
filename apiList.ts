@@ -1,6 +1,7 @@
 // /apiList.ts
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/+$/, "") || "http://localhost:4000/api";
+  
 
 const path = (...parts: (string | number)[]) => `${API_BASE}/${parts.join("/")}`;
 
@@ -151,6 +152,10 @@ const apiList = {
     // helper to attach query params when needed
     withQuery,
   },
+    upload: {
+    image: `${API_BASE}/upload-image`,
+  },
+
 };
 
 export default apiList;
