@@ -27,6 +27,7 @@ import {
   OccurrenceListEditor,
   type Occurrence,
 } from "@/components/admin/forms/OccurrenceListEditor";
+import { isoToLocalInput, localInputToIso } from "@/lib/tz";
 
 /* ---------------- types ---------------- */
 type EventType = "Free" | "Free_with_approval" | "Paid" | "Paid_with_approval";
@@ -112,12 +113,14 @@ export function EventForm({
   }, [initialData?.brands, brands]);
 
   // seed occurrences
-  const initialOccurrences: Occurrence[] = useMemo(() => {
-    if (initialData?.occurrences?.length) return initialData.occurrences;
-    if (initialData?.date?.length)
-      return initialData.date.map((d) => ({ date: d }));
-    return [{ date: "" }];
-  }, [initialData?.occurrences, initialData?.date]);
+ const initialOccurrences: Occurrence[] = useMemo(() => {
+  const src =
+    (initialData?.occurrences?.length
+      ? initialData.occurrences
+      : initialData?.date?.map((d) => ({ date: d }))) || [];
+  if (!src.length) return [{ date: "" }];
+  return src.map((o) => ({ ...o, date: isoToLocalInput(o.date) })); // 👈 BD local
+}, [initialData?.occurrences, initialData?.date]);
 
   const [formData, setFormData] = useState({
     title: initialData?.title || "",

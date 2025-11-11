@@ -18,6 +18,7 @@ import { EventForm } from "@/components/admin/forms/event-form";
 import { Calendar, MapPin, Grid3x3, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
+import { isoToLocalInput, localInputToIso } from "@/lib/tz";
 
 interface Brand {
   _id: string;
@@ -147,7 +148,7 @@ export default function EventsPage() {
     const payload = {
       ...data,
       occurrences: data.occurrences?.map((o: any) => ({
-        date: new Date(o.date).toISOString(),
+        date: localInputToIso(o.date), // 👈 BD local → ISO
         season: o.season || undefined,
         episode: o.episode || undefined,
       })),
