@@ -49,6 +49,38 @@ type ApiListResponse = {
   pagination?: { total: number; page: number; pages: number; limit: number };
 };
 
+function prettyLabel(key: string) {
+  // Preserve familiar keys, otherwise prettify: full_name -> Full Name
+  const known: Record<string, string> = {
+    name: "Name",
+    Name: "Name",
+    email: "Email",
+    Email: "Email",
+    phone: "Phone",
+    Phone: "Phone",
+  };
+  if (known[key]) return known[key];
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1));
+}
+
+function renderValue(v: any): string {
+  if (v === null || v === undefined) return "—";
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  return String(v);
+}
+
 export default function RegistrationsPage() {
   const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
 
@@ -218,6 +250,27 @@ export default function RegistrationsPage() {
     },
   ];
 
+  // Build dynamic field list for the dialog
+  const attendeeDetails = useMemo(() => {
+    if (!selected?.fields) return [];
+    const f = selected.fields;
+
+    // Normalize "primary" fields
+    const primary: Array<[string, any]> = [];
+    if (f.name ?? f.Name) primary.push(["name", f.name ?? f.Name]);
+    if (f.email ?? f.Email) primary.push(["email", f.email ?? f.Email]);
+    if (f.phone ?? f.Phone) primary.push(["phone", f.phone ?? f.Phone]);
+
+    // Remaining custom fields (excluding primary aliases)
+    const skip = new Set(["name", "Name", "email", "Email", "phone", "Phone"]);
+    const rest = Object.entries(f)
+      .filter(([k]) => !skip.has(k))
+      // stable order by label
+      .sort(([a], [b]) => prettyLabel(a).localeCompare(prettyLabel(b)));
+
+    return [...primary, ...rest];
+  }, [selected]);
+
   return (
     <div className='flex flex-col gap-6 p-6 lg:p-8'>
       <PageHeader
@@ -293,31 +346,40 @@ export default function RegistrationsPage() {
           </DialogHeader>
 
           {selected && (
-            <div className='space-y-4'>
+            <div className='space-y-6'>
+              {/* Attendee */}
               <div className='space-y-2'>
                 <h3 className='font-semibold'>Attendee</h3>
                 <div className='space-y-1 text-sm'>
-                  <div className='flex items-center gap-2'>
-                    <User className='h-4 w-4 text-muted-foreground' />
-                    <span>
-                      {selected.fields?.name || selected.fields?.Name || "—"}
-                    </span>
-                  </div>
-                  {selected.fields?.email && (
-                    <div className='flex items-center gap-2'>
-                      <Mail className='h-4 w-4 text-muted-foreground' />
-                      <span>{selected.fields.email}</span>
-                    </div>
-                  )}
-                  {selected.fields?.phone && (
-                    <div className='flex items-center gap-2'>
-                      <Phone className='h-4 w-4 text-muted-foreground' />
-                      <span>{selected.fields.phone}</span>
-                    </div>
+                  {attendeeDetails.length === 0 ? (
+                    <div className='text-muted-foreground'>No fields.</div>
+                  ) : (
+                    attendeeDetails.map(([k, v]) => (
+                      <div key={k} className='flex items-start gap-2'>
+                        {/* show nice icon for known keys */}
+                        {k.toLowerCase() === "name" && (
+                          <User className='mt-0.5 h-4 w-4 text-muted-foreground' />
+                        )}
+                        {k.toLowerCase() === "email" && (
+                          <Mail className='mt-0.5 h-4 w-4 text-muted-foreground' />
+                        )}
+                        {k.toLowerCase() === "phone" && (
+                          <Phone className='mt-0.5 h-4 w-4 text-muted-foreground' />
+                        )}
+                        {/* label + value */}
+                        <div>
+                          <span className='text-muted-foreground'>
+                            {prettyLabel(k)}:
+                          </span>{" "}
+                          <span>{renderValue(v)}</span>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
 
+              {/* Event */}
               <div className='space-y-2'>
                 <h3 className='font-semibold'>Event</h3>
                 <div className='space-y-1 text-sm'>
@@ -338,6 +400,7 @@ export default function RegistrationsPage() {
                 </div>
               </div>
 
+              {/* Actions */}
               {selected.status === "pending" && (
                 <div className='flex gap-2'>
                   <Button
@@ -357,6 +420,7 @@ export default function RegistrationsPage() {
                 </div>
               )}
 
+              {/* Payment */}
               {selected.paid && (
                 <div className='space-y-2'>
                   <h3 className='font-semibold'>Payment</h3>
