@@ -39,6 +39,11 @@ interface Event {
     string | { _id: string; brandName: string; imageLink?: string }
   >;
   customFields?: any[];
+  occurrences?: Array<{
+    date: string; // ISO string
+    season?: number;
+    episode?: number;
+  }>;
 }
 
 export default function EventsPage() {
@@ -141,7 +146,13 @@ export default function EventsPage() {
   const handleSave = async (data: Partial<Event>) => {
     const payload = {
       ...data,
-      date: (data.date || []).map((d) => new Date(d as string).toISOString()),
+      occurrences: data.occurrences?.map((o: any) => ({
+        date: new Date(o.date).toISOString(),
+        season: o.season || undefined,
+        episode: o.episode || undefined,
+      })),
+      // legacy mirror if you still support it on the backend:
+      date: data.occurrences?.map((o: any) => new Date(o.date).toISOString()),
     };
 
     try {
@@ -214,10 +225,10 @@ export default function EventsPage() {
         <div className='flex items-center gap-2'>
           <Calendar className='h-4 w-4 text-muted-foreground' />
           <span className='text-sm'>
-            {event.date?.length > 1
+            {Array.isArray(event.occurrences) && event.occurrences.length
+              ? `${event.occurrences.length} dates`
+              : event.date?.length
               ? `${event.date.length} dates`
-              : event.date?.[0]
-              ? new Date(event.date[0]).toLocaleDateString()
               : "-"}
           </span>
         </div>
@@ -322,10 +333,10 @@ export default function EventsPage() {
               </div>
               <div className='mt-3 flex items-center gap-2 text-sm'>
                 <Calendar className='h-4 w-4' />
-                {ev.date?.length > 1
+                {Array.isArray(ev.occurrences) && ev.occurrences.length
+                  ? `${ev.occurrences.length} dates`
+                  : ev.date?.length
                   ? `${ev.date.length} dates`
-                  : ev.date?.[0]
-                  ? new Date(ev.date[0]).toLocaleDateString()
                   : "-"}
               </div>
               <div className='mt-4 flex gap-2'>

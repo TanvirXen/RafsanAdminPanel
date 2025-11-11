@@ -1,48 +1,68 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useEffect, useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ImageUpload } from "@/components/admin/image-upload"
-import { Plus, X, GripVertical } from "lucide-react"
+import type React from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ImageUpload } from "@/components/admin/image-upload";
+import { Plus, X, GripVertical } from "lucide-react";
+import {
+  OccurrenceListEditor,
+  type Occurrence,
+} from "@/components/admin/forms/OccurrenceListEditor";
 
-type EventType = "Free" | "Free_with_approval" | "Paid" | "Paid_with_approval"
+type EventType = "Free" | "Free_with_approval" | "Paid" | "Paid_with_approval";
 
-type Brand = { _id: string; brandName: string; imageLink?: string }
+type Brand = { _id: string; brandName: string; imageLink?: string };
 
 interface CustomField {
-  id: string
-  name: string
-  type: "text" | "email" | "phone" | "number" | "select" | "textarea"
-  label: string
-  required: boolean
-  options?: string[]
+  id: string;
+  name: string;
+  type: "text" | "email" | "phone" | "number" | "select" | "textarea";
+  label: string;
+  required: boolean;
+  options?: string[];
 }
 
 interface EventFormProps {
   initialData?: {
-    title?: string
-    date?: string[]
-    venue?: string
-    type?: EventType
-    description?: string
-    imageLinkBg?: string
-    imageLinkOverlay?: string
-    // may be IDs, populated objects, or legacy brand names
-    brands?: Array<string | { _id: string; brandName?: string }>
-    customFields?: CustomField[]
-    category?: string
-  }
-  brands?: Brand[]                         // <-- pass from API
-  onBrandsChange?: (ids: string[]) => void // optional live callback for parent
-  onSave: (data: any) => void
-  onCancel: () => void
+    title?: string;
+    // NEW preferred source of truth
+    occurrences?: Occurrence[];
+    // Legacy; if provided and occurrences missing, we will map these
+    date?: string[];
+    venue?: string;
+    type?: EventType;
+    description?: string;
+    imageLinkBg?: string;
+    imageLinkOverlay?: string;
+    brands?: Array<string | { _id: string; brandName?: string }>;
+    customFields?: CustomField[];
+    category?: string;
+    // optional ticket url if you decide to expose it later
+    ticketUrl?: string;
+  };
+  brands?: Brand[];
+  onBrandsChange?: (ids: string[]) => void;
+  onSave: (data: any) => void;
+  onCancel: () => void;
 }
 
 export function EventForm({
@@ -52,124 +72,138 @@ export function EventForm({
   onSave,
   onCancel,
 }: EventFormProps) {
-  // --------- normalize initial brand ids (IDs, objects, or names) ----------
+  // ---- normalize initial brand ids (IDs, objects, or names) ----
   const initialBrandIds = useMemo<string[]>(() => {
-    const all = initialData?.brands ?? []
-    if (!all.length) return []
-    const byName = new Map(brands.map((b) => [b.brandName, b._id]))
+    const all = initialData?.brands ?? [];
+    if (!all.length) return [];
+    const byName = new Map(brands.map((b) => [b.brandName, b._id]));
     const ids = all
       .map((b) => {
-        if (!b) return null
+        if (!b) return null;
         if (typeof b === "string") {
-          // if string matches a known id, use it; otherwise try name->id
-          const byId = brands.find((x) => x._id === b)?._id
-          return byId ?? byName.get(b) ?? null
+          const byId = brands.find((x) => x._id === b)?._id;
+          return byId ?? byName.get(b) ?? null;
         }
-        // populated object
-        return b._id ?? byName.get((b as any).brandName || "") ?? null
+        return b._id ?? byName.get((b as any).brandName || "") ?? null;
       })
-      .filter(Boolean) as string[]
-    // de-dupe
-    return Array.from(new Set(ids))
-  }, [initialData?.brands, brands])
+      .filter(Boolean) as string[];
+    return Array.from(new Set(ids));
+  }, [initialData?.brands, brands]);
+
+  // ---- seed occurrences: use initialData.occurrences OR map from legacy date[] ----
+  const initialOccurrences: Occurrence[] = useMemo(() => {
+    if (initialData?.occurrences?.length) return initialData.occurrences;
+    if (initialData?.date?.length) {
+      // Map plain dates to occurrences
+      return initialData.date.map((d) => ({ date: d }));
+    }
+    return [{ date: "" }]; // one empty row by default
+  }, [initialData?.occurrences, initialData?.date]);
 
   // ---------------------------- form state ----------------------------
   const [formData, setFormData] = useState({
     title: initialData?.title || "",
-    date: initialData?.date?.length ? initialData.date : [""],
+    occurrences: initialOccurrences as Occurrence[],
     venue: initialData?.venue || "",
     type: (initialData?.type as EventType) || "Free",
     description: initialData?.description || "",
     imageLinkBg: initialData?.imageLinkBg || "",
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
-    brands: initialBrandIds, // <-- IDs only in local state
+    brands: initialBrandIds, // IDs only
     customFields: (initialData?.customFields as CustomField[]) || [],
     category: initialData?.category || "event",
-  })
+    ticketUrl: initialData?.ticketUrl || "",
+  });
 
   // keep brand selection in sync if brands/initialData arrive later
   useEffect(() => {
-    setFormData((prev) => ({ ...prev, brands: initialBrandIds }))
-  }, [initialBrandIds])
+    setFormData((prev) => ({ ...prev, brands: initialBrandIds }));
+  }, [initialBrandIds]);
 
   // bubble brand changes up so the parent can render chips if desired
   useEffect(() => {
-    onBrandsChange?.(formData.brands)
-  }, [formData.brands, onBrandsChange])
+    onBrandsChange?.(formData.brands);
+  }, [formData.brands, onBrandsChange]);
 
   // ---------------------------- handlers ----------------------------
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  const addDate = () => setFormData((p) => ({ ...p, date: [...p.date, ""] }))
-  const removeDate = (i: number) =>
-    setFormData((p) => ({ ...p, date: p.date.filter((_, idx) => idx !== i) }))
-  const updateDate = (i: number, v: string) =>
-    setFormData((p) => {
-      const d = [...p.date]
-      d[i] = v
-      return { ...p, date: d }
-    })
+    e.preventDefault();
+    onSave(formData); // parent will transform occurrences -> payload
+  };
 
   const toggleBrand = (brandId: string, checked?: boolean) => {
     setFormData((p) => {
-      const has = p.brands.includes(brandId)
-      let next: string[]
+      const has = p.brands.includes(brandId);
+      let next: string[];
       if (checked === undefined) {
-        next = has ? p.brands.filter((id) => id !== brandId) : [...p.brands, brandId]
+        next = has ? p.brands.filter((id) => id !== brandId) : [...p.brands, brandId];
       } else {
-        next = checked ? (has ? p.brands : [...p.brands, brandId]) : p.brands.filter((id) => id !== brandId)
+        next = checked
+          ? has
+            ? p.brands
+            : [...p.brands, brandId]
+          : p.brands.filter((id) => id !== brandId);
       }
-      // de-dupe just in case
-      next = Array.from(new Set(next))
-      return { ...p, brands: next }
-    })
-  }
+      next = Array.from(new Set(next));
+      return { ...p, brands: next };
+    });
+  };
 
   const addCustomField = () =>
     setFormData((p) => ({
       ...p,
       customFields: [
         ...p.customFields,
-        { id: Date.now().toString(), name: "", type: "text", label: "", required: false } as CustomField,
+        {
+          id: Date.now().toString(),
+          name: "",
+          type: "text",
+          label: "",
+          required: false,
+        } as CustomField,
       ],
-    }))
+    }));
 
   const removeCustomField = (id: string) =>
-    setFormData((p) => ({ ...p, customFields: p.customFields.filter((f) => f.id !== id) }))
+    setFormData((p) => ({
+      ...p,
+      customFields: p.customFields.filter((f) => f.id !== id),
+    }));
 
   const updateCustomField = (id: string, updates: Partial<CustomField>) =>
     setFormData((p) => ({
       ...p,
       customFields: p.customFields.map((f) => (f.id === id ? { ...f, ...updates } : f)),
-    }))
+    }));
 
   const addFieldOption = (fieldId: string) =>
     setFormData((p) => ({
       ...p,
-      customFields: p.customFields.map((f) => (f.id === fieldId ? { ...f, options: [...(f.options || []), ""] } : f)),
-    }))
+      customFields: p.customFields.map((f) =>
+        f.id === fieldId ? { ...f, options: [...(f.options || []), ""] } : f
+      ),
+    }));
 
   const updateFieldOption = (fieldId: string, optionIndex: number, value: string) =>
     setFormData((p) => ({
       ...p,
       customFields: p.customFields.map((f) => {
-        if (f.id !== fieldId) return f
-        const opts = [...(f.options || [])]
-        opts[optionIndex] = value
-        return { ...f, options: opts }
+        if (f.id !== fieldId) return f;
+        const opts = [...(f.options || [])];
+        opts[optionIndex] = value;
+        return { ...f, options: opts };
       }),
-    }))
+    }));
 
   const removeFieldOption = (fieldId: string, optionIndex: number) =>
     setFormData((p) => ({
       ...p,
       customFields: p.customFields.map((f) =>
-        f.id === fieldId ? { ...f, options: (f.options || []).filter((_, i) => i !== optionIndex) } : f
+        f.id === fieldId
+          ? { ...f, options: (f.options || []).filter((_, i) => i !== optionIndex) }
+          : f
       ),
-    }))
+    }));
 
   // ---------------------------- UI ----------------------------
   return (
@@ -184,23 +218,11 @@ export function EventForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Event Date(s)</Label>
-        {formData.date.map((date, index) => (
-          <div key={index} className="flex gap-2">
-            <Input type="date" value={date} onChange={(e) => updateDate(index, e.target.value)} required />
-            {formData.date.length > 1 && (
-              <Button type="button" variant="outline" size="icon" onClick={() => removeDate(index)}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        ))}
-        <Button type="button" variant="outline" size="sm" onClick={addDate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Another Date
-        </Button>
-      </div>
+      {/* NEW: Occurrence editor (date + optional S/E) */}
+      <OccurrenceListEditor
+        value={formData.occurrences}
+        onChange={(rows) => setFormData((p) => ({ ...p, occurrences: rows }))}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
@@ -215,7 +237,12 @@ export function EventForm({
 
         <div className="space-y-2">
           <Label htmlFor="type">Event Type</Label>
-          <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as EventType })}>
+          <Select
+            value={formData.type}
+            onValueChange={(value) =>
+              setFormData({ ...formData, type: value as EventType })
+            }
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -271,16 +298,29 @@ export function EventForm({
         />
       </div>
 
+      {/* (Optional) Ticket URL field if you use it */}
+      {/* <div className="space-y-2">
+        <Label htmlFor="ticketUrl">Ticket URL</Label>
+        <Input
+          id="ticketUrl"
+          value={formData.ticketUrl}
+          onChange={(e) => setFormData({ ...formData, ticketUrl: e.target.value })}
+          placeholder="https://tickets.example.com/..."
+        />
+      </div> */}
+
       {/* Associated brands from API (IDs) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Associated Brands</CardTitle>
-          <CardDescription>Select brands that are sponsoring or associated with this event</CardDescription>
+          <CardDescription>
+            Select brands that are sponsoring or associated with this event
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
             {brands.map((brand) => {
-              const checked = formData.brands.includes(brand._id)
+              const checked = formData.brands.includes(brand._id);
               return (
                 <div key={brand._id} className="flex items-center space-x-2">
                   <Checkbox
@@ -295,7 +335,7 @@ export function EventForm({
                     {brand.brandName}
                   </label>
                 </div>
-              )
+              );
             })}
           </div>
         </CardContent>
@@ -305,10 +345,8 @@ export function EventForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Registration Form Fields</CardTitle>
-          <CardDescription>
-            Create custom fields that attendees will fill out when registering for this event
-          </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-4">
           {formData.customFields.map((field: CustomField, index: number) => (
             <Card key={field.id} className="border-2">
@@ -317,7 +355,9 @@ export function EventForm({
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <GripVertical className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm font-medium text-muted-foreground">Field {index + 1}</span>
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Field {index + 1}
+                      </span>
                     </div>
                     <Button
                       type="button"
@@ -335,7 +375,9 @@ export function EventForm({
                       <Label>Field Label</Label>
                       <Input
                         value={field.label}
-                        onChange={(e) => updateCustomField(field.id, { label: e.target.value })}
+                        onChange={(e) =>
+                          updateCustomField(field.id, { label: e.target.value })
+                        }
                         placeholder="e.g., Full Name, Email Address"
                       />
                     </div>
@@ -344,7 +386,9 @@ export function EventForm({
                       <Label>Field Name (ID)</Label>
                       <Input
                         value={field.name}
-                        onChange={(e) => updateCustomField(field.id, { name: e.target.value })}
+                        onChange={(e) =>
+                          updateCustomField(field.id, { name: e.target.value })
+                        }
                         placeholder="e.g., full_name, email"
                       />
                     </div>
@@ -355,7 +399,9 @@ export function EventForm({
                       <Label>Field Type</Label>
                       <Select
                         value={field.type}
-                        onValueChange={(value: any) => updateCustomField(field.id, { type: value })}
+                        onValueChange={(value: any) =>
+                          updateCustomField(field.id, { type: value })
+                        }
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -375,9 +421,14 @@ export function EventForm({
                       <Checkbox
                         id={`required-${field.id}`}
                         checked={field.required}
-                        onCheckedChange={(c) => updateCustomField(field.id, { required: Boolean(c) })}
+                        onCheckedChange={(c) =>
+                          updateCustomField(field.id, { required: Boolean(c) })
+                        }
                       />
-                      <label htmlFor={`required-${field.id}`} className="text-sm font-medium leading-none">
+                      <label
+                        htmlFor={`required-${field.id}`}
+                        className="text-sm font-medium leading-none"
+                      >
                         Required field
                       </label>
                     </div>
@@ -390,14 +441,18 @@ export function EventForm({
                         <div key={optionIndex} className="flex gap-2">
                           <Input
                             value={option}
-                            onChange={(e) => updateFieldOption(field.id, optionIndex, e.target.value)}
+                            onChange={(e) =>
+                              updateFieldOption(field.id, optionIndex, e.target.value)
+                            }
                             placeholder={`Option ${optionIndex + 1}`}
                           />
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            onClick={() => removeFieldOption(field.id, optionIndex)}
+                            onClick={() =>
+                              removeFieldOption(field.id, optionIndex)
+                            }
                           >
                             <X className="h-4 w-4" />
                           </Button>
@@ -420,7 +475,12 @@ export function EventForm({
             </Card>
           ))}
 
-          <Button type="button" variant="outline" onClick={addCustomField} className="w-full bg-transparent">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addCustomField}
+            className="w-full bg-transparent"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Custom Field
           </Button>
@@ -434,5 +494,5 @@ export function EventForm({
         <Button type="submit">Save Event</Button>
       </div>
     </form>
-  )
+  );
 }
