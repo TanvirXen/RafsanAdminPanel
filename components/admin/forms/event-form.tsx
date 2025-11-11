@@ -105,7 +105,7 @@ export function EventForm({
           const byId = brands.find((x) => x._id === b)?._id;
           return byId ?? byName.get(b) ?? null;
         }
-        return b._id ?? byName.get((b as any).brandName || "") ?? null;
+        return (b as any)._id ?? byName.get((b as any).brandName || "") ?? null;
       })
       .filter(Boolean) as string[];
     return Array.from(new Set(ids));
@@ -142,11 +142,10 @@ export function EventForm({
     );
   }, [initialBrandIds]);
 
-  // (optional) if customFields prop changes, sanitize once (no loop)
+  // sync customFields if prop changes (no loop)
   useEffect(() => {
     setFormData((prev) => {
       const next = sanitizeFields(initialData?.customFields);
-      // cheap equality by id + length to avoid useless setState
       const same =
         prev.customFields.length === next.length &&
         prev.customFields.every((f, i) => f.id === next[i].id);
@@ -176,8 +175,7 @@ export function EventForm({
           : p.brands.filter((id) => id !== brandId);
       }
       next = Array.from(new Set(next));
-      // notify parent ONLY on user interaction to avoid feedback loops
-      onBrandsChange?.(next);
+      onBrandsChange?.(next); // notify parent only on user action
       return { ...p, brands: next };
     });
   };
@@ -276,7 +274,7 @@ export function EventForm({
           <Select
             value={formData.type}
             onValueChange={(value) =>
-              setFormData({ ...formData, type: value as EventType })
+              setFormData({ ...formData, type: value as any })
             }
           >
             <SelectTrigger>
@@ -363,7 +361,7 @@ export function EventForm({
                   />
                   <label
                     htmlFor={`brand-${brand._id}`}
-                    className='text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
+                    className='text-sm font-medium leading-none'
                   >
                     {brand.brandName}
                   </label>
