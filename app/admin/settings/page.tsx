@@ -43,6 +43,8 @@ import {
 import { ImageUpload } from "@/components/admin/image-upload";
 import { toast } from "react-toastify";
 
+/* ====================== TYPES ====================== */
+
 type IconName = "Users" | "Calendar" | "Award" | "TrendingUp" | "Globe";
 
 interface QuickFact {
@@ -51,6 +53,19 @@ interface QuickFact {
   icon: IconName;
   description: string;
 }
+
+type HelpKey =
+  | "sessions_workshops"
+  | "corporate_shows"
+  | "hosting_event"
+  | "brand_collab";
+
+type HelpCard = {
+  id: string;
+  key: HelpKey;
+  title: string;
+  description: string;
+};
 
 type SettingsDto = {
   socialLinks?: {
@@ -69,6 +84,32 @@ type SettingsDto = {
   };
   aboutSection?: { title?: string; description?: string; image?: string };
   quickFacts?: QuickFact[];
+  helpSection?: { cards?: HelpCard[] };
+};
+
+/* ====== FIXED ORDER BY KEY ====== */
+const HELP_ORDER: HelpKey[] = [
+  "hosting_event",
+  "sessions_workshops",
+  "brand_collab",
+  "corporate_shows",
+];
+
+const HELP_TITLE_FALLBACK: Record<HelpKey, string> = {
+  hosting_event: "Hosting an Event",
+  sessions_workshops: "Sessions & Workshops",
+  brand_collab: "Brand Collaboration",
+  corporate_shows: "Corporate Shows",
+};
+const HELP_DESC_FALLBACK: Record<HelpKey, string> = {
+  hosting_event:
+    "From corporate gatherings to cultural festivals, I focus on creating a truly engaging and lively atmosphere. My sincere humor and audience connection ensure a seamless, inclusive, and memorable event",
+  sessions_workshops:
+    "I conduct interactive sessions and workshops for universities, organizations, professionals, and even aspiring hosts. In these energetic sessions, I share my journey, the essential insights, and the practical skills I've learned. Participants walk away ready to apply powerful communication and storytelling techniques for real-world success.",
+  brand_collab:
+    "I help brands tell stories that truly connect. With content and creative campaigns, I make your brand unforgettable.",
+  corporate_shows:
+    "Turn your workplace into a stage of laughter and energy ! Fun,interactive corporate sows that boost smiles ,spirit and teamwork.",
 };
 
 export default function SettingsPage() {
@@ -78,8 +119,9 @@ export default function SettingsPage() {
   const [savingHero, setSavingHero] = useState(false);
   const [savingAbout, setSavingAbout] = useState(false);
   const [savingFacts, setSavingFacts] = useState(false);
+  const [savingHelp, setSavingHelp] = useState(false);
 
-  /* ---------- states ---------- */
+  /* ---------- state ---------- */
   const [socialLinks, setSocialLinks] = useState<
     NonNullable<SettingsDto["socialLinks"]>
   >({
@@ -109,6 +151,7 @@ export default function SettingsPage() {
   });
 
   const [quickFacts, setQuickFacts] = useState<QuickFact[]>([]);
+  const [helpCards, setHelpCards] = useState<HelpCard[]>([]);
 
   /* ---------- icons ---------- */
   const iconMap: Record<IconName, React.ReactNode> = useMemo(
@@ -122,14 +165,19 @@ export default function SettingsPage() {
     []
   );
 
-  /* ---------- load settings ---------- */
+  /* ====================== LOAD SETTINGS ====================== */
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       try {
         const j = await apiFetch<{ setting?: SettingsDto; data?: SettingsDto }>(
           apiList.settings.get
         );
         const s: SettingsDto = j.setting || j.data || {};
+
+        if (!alive) return;
+
         if (s.socialLinks)
           setSocialLinks((prev) => ({ ...prev, ...s.socialLinks }));
         if (s.heroSection)
@@ -137,25 +185,48 @@ export default function SettingsPage() {
         if (s.aboutSection)
           setAboutSection((prev) => ({ ...prev, ...s.aboutSection }));
         if (s.quickFacts) setQuickFacts(s.quickFacts);
+
+        // Normalize help cards strictly by key order (no serials)
+        const byKey = new Map<HelpKey, HelpCard>();
+        (s.helpSection?.cards || []).forEach((c) => {
+          if (c?.key) byKey.set(c.key as HelpKey, c as HelpCard);
+        });
+
+        const ensureId = () =>
+          globalThis.crypto?.randomUUID?.() ||
+          `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const normalized: HelpCard[] = HELP_ORDER.map((k) => {
+          const fromDb = byKey.get(k);
+          return {
+            id: fromDb?.id || ensureId(),
+            key: k,
+            title: fromDb?.title || HELP_TITLE_FALLBACK[k],
+            description: fromDb?.description || HELP_DESC_FALLBACK[k],
+          };
+        });
+
+        setHelpCards(normalized);
       } catch (e: any) {
         toast.error(e?.message || "Failed to load settings");
       } finally {
         setLoading(false);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  /* ---------- helpers ---------- */
+  /* ====================== HELPERS ====================== */
   const putSettings = async (payload: SettingsDto) => {
     const j = await apiFetch<{ setting?: SettingsDto }>(
       apiList.settings.update,
-      {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      }
+      { method: "PUT", body: JSON.stringify(payload) }
     );
-    // normalize back from server response
     const s: SettingsDto = j.setting || {};
+
     if (s.socialLinks)
       setSocialLinks((prev) => ({ ...prev, ...s.socialLinks }));
     if (s.heroSection)
@@ -163,15 +234,31 @@ export default function SettingsPage() {
     if (s.aboutSection)
       setAboutSection((prev) => ({ ...prev, ...s.aboutSection }));
     if (s.quickFacts) setQuickFacts(s.quickFacts);
+
+    // Normalize help cards from server (still by key order)
+    const byKey = new Map<HelpKey, HelpCard>();
+    (s.helpSection?.cards || []).forEach((c) => {
+      if (c?.key) byKey.set(c.key as HelpKey, c as HelpCard);
+    });
+
+    const normalized: HelpCard[] = HELP_ORDER.map((k) => ({
+      id:
+        byKey.get(k)?.id ||
+        globalThis.crypto?.randomUUID?.() ||
+        `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      key: k,
+      title: byKey.get(k)?.title || HELP_TITLE_FALLBACK[k],
+      description: byKey.get(k)?.description || HELP_DESC_FALLBACK[k],
+    }));
+    setHelpCards(normalized);
   };
 
   /* ---------- social ---------- */
   const handleSocialLinkChange = (
     platform: keyof NonNullable<SettingsDto["socialLinks"]>,
     value: string
-  ) => {
-    setSocialLinks((prev) => ({ ...prev, [platform]: value }));
-  };
+  ) => setSocialLinks((prev) => ({ ...prev, [platform]: value }));
+
   const handleSaveSocialLinks = async () => {
     try {
       setSavingSocial(true);
@@ -188,9 +275,8 @@ export default function SettingsPage() {
   const handleHeroChange = (
     field: keyof NonNullable<SettingsDto["heroSection"]>,
     value: string
-  ) => {
-    setHeroSection((prev) => ({ ...prev, [field]: value }));
-  };
+  ) => setHeroSection((prev) => ({ ...prev, [field]: value }));
+
   const handleSaveHeroSection = async () => {
     try {
       setSavingHero(true);
@@ -207,9 +293,8 @@ export default function SettingsPage() {
   const handleAboutChange = (
     field: keyof NonNullable<SettingsDto["aboutSection"]>,
     value: string
-  ) => {
-    setAboutSection((prev) => ({ ...prev, [field]: value }));
-  };
+  ) => setAboutSection((prev) => ({ ...prev, [field]: value }));
+
   const handleSaveAboutSection = async () => {
     try {
       setSavingAbout(true);
@@ -232,17 +317,19 @@ export default function SettingsPage() {
     };
     setQuickFacts((prev) => [...prev, newFact]);
   };
+
   const handleQuickFactChange = (
     id: string,
     field: keyof QuickFact,
     value: string
-  ) => {
+  ) =>
     setQuickFacts((prev) =>
       prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
     );
-  };
+
   const handleDeleteQuickFact = (id: string) =>
     setQuickFacts((prev) => prev.filter((f) => f.id !== id));
+
   const handleSaveQuickFacts = async () => {
     try {
       setSavingFacts(true);
@@ -262,6 +349,64 @@ export default function SettingsPage() {
     }
   };
 
+  /* ---------- help section (no serials) ---------- */
+  const handleHelpChange = (
+    id: string,
+    key: HelpKey,
+    field: keyof HelpCard,
+    value: string
+  ) => {
+    if (field === "key") return; // keys fixed
+
+    setHelpCards((prev) => {
+      const idx = prev.findIndex((c) => c.id === id);
+      // If card not in state yet (e.g. fallback), create it
+      if (idx === -1) {
+        const base: HelpCard = {
+          id,
+          key,
+          title: field === "title" ? value : HELP_TITLE_FALLBACK[key],
+          description:
+            field === "description" ? value : HELP_DESC_FALLBACK[key],
+        };
+        return [...prev, base];
+      }
+
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveHelpSection = async () => {
+    try {
+      setSavingHelp(true);
+
+      const payloadCards: HelpCard[] = HELP_ORDER.map((k) => {
+        const found = helpCards.find((c) => c.key === k);
+        const id =
+          found?.id ||
+          globalThis.crypto?.randomUUID?.() ||
+          `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        return {
+          id,
+          key: k,
+          title: found?.title || HELP_TITLE_FALLBACK[k],
+          description: found?.description || HELP_DESC_FALLBACK[k],
+        };
+      });
+
+      await putSettings({ helpSection: { cards: payloadCards } });
+      toast.success("Help section saved");
+    } catch (e: any) {
+      toast.error(e?.message || "Save failed");
+    } finally {
+      setSavingHelp(false);
+    }
+  };
+
+  /* ====================== RENDER ====================== */
+
   if (loading) {
     return (
       <div className='p-6'>
@@ -275,6 +420,17 @@ export default function SettingsPage() {
       </div>
     );
   }
+
+  // Derived view for help cards: always 4 in fixed order, with safe fallbacks
+  const viewHelpCards: HelpCard[] = HELP_ORDER.map((k) => {
+    const fromState = helpCards.find((c) => c.key === k);
+    return {
+      id: fromState?.id || `help-${k}`,
+      key: k,
+      title: fromState?.title || HELP_TITLE_FALLBACK[k],
+      description: fromState?.description || HELP_DESC_FALLBACK[k],
+    };
+  });
 
   return (
     <div className='flex flex-col gap-6 p-6'>
@@ -478,59 +634,66 @@ export default function SettingsPage() {
 
       <Separator />
 
-      {/* About Section */}
+      {/* Help Section (NO SERIAL) */}
       <Card>
         <CardHeader>
-          <CardTitle>About Section</CardTitle>
+          <CardTitle>Help Section (Cards)</CardTitle>
           <CardDescription>
-            Customize the about section on your website
+            Fixed order by key: 1 <b>Hosting an Event</b>, 2{" "}
+            <b>Sessions &amp; Workshops</b>, 3 <b>Brand Collaboration</b>, 4{" "}
+            <b>Corporate Shows</b>.
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-6'>
-          <ImageUpload
-            label='About Image'
-            value={aboutSection.image || ""}
-            onChange={(value) =>
-              setAboutSection((p) => ({ ...p, image: value }))
-            }
-            placeholder='Upload or paste about image URL'
-          />
-
-          <Separator />
-
           <div className='space-y-4'>
-            <div className='space-y-2'>
-              <Label htmlFor='about-title'>About Title</Label>
-              <Input
-                id='about-title'
-                placeholder='Enter about title'
-                value={aboutSection.title || ""}
-                onChange={(e) => handleAboutChange("title", e.target.value)}
-              />
-            </div>
+            {viewHelpCards.map((c) => (
+              <Card key={c.id} className='border-2'>
+                <CardContent className='pt-6 space-y-4'>
+                  <div className='grid gap-4 md:grid-cols-4'>
+                    {/* <div className='space-y-2'>
+                      <Label>Key</Label>
+                      <Input value={c.key} readOnly />
+                    </div> */}
 
-            <div className='space-y-2'>
-              <Label htmlFor='about-description'>About Description</Label>
-              <Textarea
-                id='about-description'
-                placeholder='Enter about description'
-                rows={6}
-                value={aboutSection.description || ""}
-                onChange={(e) =>
-                  handleAboutChange("description", e.target.value)
-                }
-              />
-            </div>
+                    <div className='space-y-2 md:col-span-3'>
+                      <Label>Title</Label>
+                      <Input
+                        value={c.title}
+                        onChange={(e) =>
+                          handleHelpChange(c.id, c.key, "title", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className='space-y-2 md:col-span-4'>
+                      <Label>Description</Label>
+                      <Textarea
+                        rows={4}
+                        value={c.description}
+                        onChange={(e) =>
+                          handleHelpChange(
+                            c.id,
+                            c.key,
+                            "description",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          <div className='flex justify-end pt-4'>
+          <div className='flex justify-end pt-2'>
             <Button
-              onClick={handleSaveAboutSection}
+              onClick={handleSaveHelpSection}
               className='gap-2'
-              disabled={savingAbout}
+              disabled={savingHelp}
             >
               <Save className='h-4 w-4' />
-              {savingAbout ? "Saving…" : "Save About Section"}
+              {savingHelp ? "Saving…" : "Save Help Section"}
             </Button>
           </div>
         </CardContent>
@@ -641,7 +804,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* tiny live icon preview */}
                   <div className='mt-3 text-muted-foreground flex items-center gap-2'>
                     <span className='text-xs'>Preview:</span>
                     {iconMap[fact.icon]}
