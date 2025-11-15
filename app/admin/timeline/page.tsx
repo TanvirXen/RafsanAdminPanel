@@ -13,17 +13,34 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TimelineForm } from "@/components/admin/forms/timeline-form";
-import { Calendar, ImageIcon } from "lucide-react";
+import { Calendar, ImageIcon, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 
-interface TimelineItem {
+export interface TimelineItem {
   _id: string;
   date: string; // ISO string
   imageLink: string;
   description: string;
   cardUrl?: string;
+  slotKey?: string; // NEW
 }
+
+const SLOT_LABELS: Record<string, string> = {
+  journeyHero: "Journey • Hero card",
+  journey1Left: "Journey 1 • Left",
+  journey1Right: "Journey 1 • Right",
+  journey2Left: "Journey 2 • Left",
+  journey2Right: "Journey 2 • Right",
+  journey3Left: "Journey 3 • Left",
+  journey3TopRight: "Journey 3 • Top Right",
+  journey3BottomRight: "Journey 3 • Bottom Right",
+  setbackMainLeft: "Setback • Main Left",
+  setbackMainRight: "Setback • Main Right",
+  setbackMosaicLeft: "Setback Mosaic • Left",
+  setbackMosaicTopRight: "Setback Mosaic • Top Right",
+  setbackMosaicBottomRight: "Setback Mosaic • Bottom Right",
+};
 
 export default function TimelinePage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -95,9 +112,11 @@ export default function TimelinePage() {
 
   const handleSave = async (data: Partial<TimelineItem>) => {
     // Ensure backend validation passes (expects ISO8601 date)
-    const payload = {
+    const payload: Partial<TimelineItem> = {
       ...data,
       date: data.date ? new Date(data.date).toISOString() : undefined,
+      slotKey: data.slotKey || undefined,
+      cardUrl: data.cardUrl || undefined,
     };
 
     try {
@@ -142,8 +161,8 @@ export default function TimelinePage() {
       key: "date",
       label: "Date",
       render: (item: TimelineItem) => (
-        <div className='flex items-center gap-2'>
-          <Calendar className='h-4 w-4 text-muted-foreground' />
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
           {new Date(item.date).toLocaleDateString()}
         </div>
       ),
@@ -152,32 +171,51 @@ export default function TimelinePage() {
       key: "description",
       label: "Description",
       render: (item: TimelineItem) => (
-        <span className='line-clamp-2'>{item.description}</span>
+        <span className="line-clamp-2">{item.description}</span>
       ),
     },
     {
       key: "imageLink",
       label: "Image",
       render: () => (
-        <div className='flex items-center gap-2'>
-          <ImageIcon className='h-4 w-4 text-muted-foreground' />
-          <span className='text-xs text-muted-foreground'>Image attached</span>
+        <div className="flex items-center gap-2">
+          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Image attached</span>
         </div>
       ),
+    },
+    {
+      key: "slotKey",
+      label: "Slot",
+      render: (item: TimelineItem) =>
+        item.slotKey ? (
+          <div className="flex items-center gap-1 text-xs">
+            <Tag className="h-3 w-3 text-muted-foreground" />
+            <span>{SLOT_LABELS[item.slotKey] ?? item.slotKey}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
     },
     {
       key: "cardUrl",
       label: "Card URL",
       render: (item: TimelineItem) =>
-        item.cardUrl ? <span className='text-xs'>{item.cardUrl}</span> : "-",
+        item.cardUrl ? (
+          <span className="text-xs text-blue-500 underline">
+            {item.cardUrl}
+          </span>
+        ) : (
+          "-"
+        ),
     },
   ];
 
   return (
-    <div className='flex flex-col gap-6 p-6 lg:p-8'>
+    <div className="flex flex-col gap-6 p-6 lg:p-8">
       <PageHeader
-        title='Journey Timeline'
-        description="Manage your company's journey and milestones"
+        title="Journey Timeline"
+        description="Manage your journey & setback cards from a single source"
       />
 
       <DataTable
@@ -186,18 +224,18 @@ export default function TimelinePage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder='Search timeline...'
+        searchPlaceholder="Search timeline..."
       />
 
       {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className='w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden'>
-          <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] p-0 overflow-hidden">
+          <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4">
             <DialogTitle>
               {editingItem ? "Edit Timeline Item" : "Add Timeline Item"}
             </DialogTitle>
           </DialogHeader>
-          <div className='overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]'>
+          <div className="overflow-y-auto px-6 py-5 max-h-[calc(85vh-64px)]">
             <TimelineForm
               initialData={editingItem || undefined}
               onSave={handleSave}
@@ -214,16 +252,16 @@ export default function TimelinePage() {
           if (!open) resolveConfirm(false);
         }}
       >
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{confirmTitle}</DialogTitle>
           </DialogHeader>
-          <p className='text-sm text-muted-foreground'>{confirmDesc}</p>
-          <div className='mt-6 flex justify-end gap-2'>
-            <Button variant='outline' onClick={() => resolveConfirm(false)}>
+          <p className="text-sm text-muted-foreground">{confirmDesc}</p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => resolveConfirm(false)}>
               Cancel
             </Button>
-            <Button variant='destructive' onClick={() => resolveConfirm(true)}>
+            <Button variant="destructive" onClick={() => resolveConfirm(true)}>
               Delete
             </Button>
           </div>
