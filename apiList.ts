@@ -1,12 +1,15 @@
-// /apiList.ts
+// /apiList.ts (ADMIN CMS)
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/+$/, "") || "http://localhost:4000/api";
-  
 
 const path = (...parts: (string | number)[]) => `${API_BASE}/${parts.join("/")}`;
 
 // Simple querystring helper (optional to use)
-const withQuery = (url: string, params?: Record<string, string | number | boolean | undefined>) => {
+const withQuery = (
+  url: string,
+  params?: Record<string, string | number | boolean | undefined>
+) => {
   if (!params) return url;
   const sp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -18,9 +21,11 @@ const withQuery = (url: string, params?: Record<string, string | number | boolea
 
 const apiList = {
   base: API_BASE,
- dashboard: {
+
+  dashboard: {
     summary: path("dashboard", "summary"),
   },
+
   auth: {
     register: path("auth", "register"),
     login: path("auth", "login"),
@@ -80,6 +85,18 @@ const apiList = {
     update: path("settings"),
   },
 
+  // ----- Newsletter (admin) -----
+  newsletter: {
+    // GET /api/newsletter/settings
+    settingsGet: path("newsletter", "settings"),
+
+    // PUT /api/newsletter/settings
+    settingsUpdate: path("newsletter", "settings"),
+
+    // GET /api/newsletter/subscribers
+    listSubscribers: path("newsletter", "subscribers"),
+  },
+
   notableEvents: {
     list: path("notable-events"),
     create: path("notable-events"),
@@ -120,8 +137,10 @@ const apiList = {
     // Create season under a show
     createSeason: (showId: string) => path("shows", showId, "seasons"),
     // Update/Delete a season under a show
-    updateSeason: (showId: string, seasonId: string) => path("shows", showId, "seasons", seasonId),
-    deleteSeason: (showId: string, seasonId: string) => path("shows", showId, "seasons", seasonId),
+    updateSeason: (showId: string, seasonId: string) =>
+      path("shows", showId, "seasons", seasonId),
+    deleteSeason: (showId: string, seasonId: string) =>
+      path("shows", showId, "seasons", seasonId),
 
     // -------- Episodes --------
     // List all episodes (optionally filter using withQuery(..., { showId, seasonId }))
@@ -146,16 +165,18 @@ const apiList = {
     // Create reel for a show
     createReel: (showId: string) => path("shows", showId, "reels"),
     // Update/Delete a reel
-    updateReel: (showId: string, reelId: string) => path("shows", showId, "reels", reelId),
-    deleteReel: (showId: string, reelId: string) => path("shows", showId, "reels", reelId),
+    updateReel: (showId: string, reelId: string) =>
+      path("shows", showId, "reels", reelId),
+    deleteReel: (showId: string, reelId: string) =>
+      path("shows", showId, "reels", reelId),
 
     // helper to attach query params when needed
     withQuery,
   },
-    upload: {
+
+  upload: {
     image: `${API_BASE}/upload-image`,
   },
-
 };
 
 export default apiList;

@@ -634,6 +634,66 @@ export default function SettingsPage() {
 
       <Separator />
 
+      {/* About Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Story Teaser Section</CardTitle>
+          <CardDescription>
+            Controls the story teaser on the homepage
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-6'>
+          <ImageUpload
+            label='About Image'
+            value={aboutSection.image || ""}
+            onChange={(value) =>
+              setAboutSection((p) => ({ ...p, image: value }))
+            }
+            placeholder='Upload or paste about image URL'
+          />
+
+          <Separator />
+
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='about-title'>Story Teaser Title</Label>
+              <Input
+                id='about-title'
+                placeholder='Enter story teaser title (e.g., Host | Content Creator | Storyteller)'
+                value={aboutSection.title || ""}
+                onChange={(e) => handleAboutChange("title", e.target.value)}
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='about-description'>Story Teaser Description</Label>
+              <Textarea
+                id='about-description'
+                placeholder='Enter story teaser description'
+                rows={4}
+                value={aboutSection.description || ""}
+                onChange={(e) =>
+                  handleAboutChange("description", e.target.value)
+                }
+              />
+            </div>
+          </div>
+
+          <div className='flex justify-end pt-4'>
+            <Button
+              onClick={handleSaveAboutSection}
+              className='gap-2'
+              disabled={savingAbout}
+            >
+              <Save className='h-4 w-4' />
+              {savingAbout ? "Saving…" : "Save Story Section"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
       {/* Help Section (NO SERIAL) */}
       <Card>
         <CardHeader>

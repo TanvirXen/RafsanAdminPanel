@@ -37,6 +37,7 @@ const navigation: NavItem[] = [
   { name: "Brands", href: "/admin/brands", icon: Award },
   { name: "Shots", href: "/admin/shots", icon: ImageIcon },
   { name: "Settings", href: "/admin/settings", icon: SettingsIcon },
+  { name: "Newsletter", href: "/admin/newsletter", icon: Users },
 ];
 
 function Sidebar({
