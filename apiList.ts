@@ -182,6 +182,25 @@ const apiList = {
     update: (type: "about" | "gallery") =>
       withQuery(path("banners"), { type }),
   },
+  contact: {
+    create: path("contact"),
+    list: (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
+      const url = new URL(path("contact"), API_BASE);
+
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            url.searchParams.set(key, String(value));
+          }
+        });
+      }
+
+      return url.toString();
+    },
+    updateStatus: (id: string) => path("contact", id, "status"),
+    delete: (id: string) => path("contact", id),
+  },
+
 
   upload: {
     image: `${API_BASE}/upload-image`,
