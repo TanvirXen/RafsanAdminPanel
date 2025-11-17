@@ -46,6 +46,8 @@ interface Show {
   description?: string;
   thumbnail?: string;
   heroImage?: string;
+  // 🔥 NOW supports podcast
+  designVariant?: "base" | "cinematic" | "podcast";
 }
 
 interface Season {
@@ -578,6 +580,20 @@ export default function ShowsPage() {
         ),
     },
     {
+      key: "designVariant",
+      label: "Design",
+      render: (show: Show) => {
+        const dv = show.designVariant || "base";
+        const label =
+          dv === "cinematic"
+            ? "Cinematic"
+            : dv === "podcast"
+            ? "Podcast"
+            : "Base";
+        return <Badge variant='outline'>{label}</Badge>;
+      },
+    },
+    {
       key: "description",
       label: "Description",
       render: (show: Show) => (
@@ -703,7 +719,18 @@ export default function ShowsPage() {
                   <CardHeader>
                     <div className='flex items-start justify-between'>
                       <CardTitle className='text-lg'>{show.title}</CardTitle>
-                      {show.featured && <Badge>Featured</Badge>}
+                      <div className='flex gap-2'>
+                        {show.designVariant && (
+                          <Badge variant='outline'>
+                            {show.designVariant === "cinematic"
+                              ? "Cinematic"
+                              : show.designVariant === "podcast"
+                              ? "Podcast"
+                              : "Base"}
+                          </Badge>
+                        )}
+                        {show.featured && <Badge>Featured</Badge>}
+                      </div>
                     </div>
                     <CardDescription className='line-clamp-2'>
                       {show.description}
