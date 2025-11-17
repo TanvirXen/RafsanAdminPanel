@@ -1,7 +1,22 @@
 "use client";
 
+import type React from "react";
 import { useEffect, useState } from "react";
-import apiList from "../../../apiList";
+import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
+
+import { PageHeader } from "@/components/admin/page-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "react-toastify";
 
 type ContactMessage = {
   _id: string;
@@ -41,21 +56,15 @@ export default function AdminContactPage() {
         search: search || undefined,
       });
 
-      const res = await fetch(url, {
-        credentials: "include", // if your admin uses cookies
-      });
+      // Use shared helper (handles base URL, auth, etc.)
+      const data = await apiFetch<ApiResponse>(url);
 
-      if (!res.ok) {
-        console.error("Failed to fetch contact messages", res.status);
-        return;
-      }
-
-      const data = (await res.json()) as ApiResponse;
       setMessages(data.items);
       setPage(data.page);
       setTotalPages(data.totalPages);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error loading contact messages", e);
+      toast.error(e?.message || "Failed to load contact messages");
     } finally {
       setLoading(false);
     }
@@ -66,25 +75,22 @@ export default function AdminContactPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
-  const handleStatusChange = async (id: string, status: ContactMessage["status"]) => {
+  const handleStatusChange = async (
+    id: string,
+    status: ContactMessage["status"]
+  ) => {
     try {
-      const res = await fetch(apiList.contact.updateStatus(id), {
+      await apiFetch(apiList.contact.updateStatus(id), {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
 
-      if (!res.ok) {
-        console.error("Failed to update status");
-        return;
-      }
-
+      toast.success("Status updated");
       await fetchMessages(page);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error updating status", e);
+      toast.error(e?.message || "Failed to update status");
     }
   };
 
@@ -92,19 +98,12 @@ export default function AdminContactPage() {
     if (!confirm("Delete this message?")) return;
 
     try {
-      const res = await fetch(apiList.contact.delete(id), {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        console.error("Failed to delete message");
-        return;
-      }
-
+      await apiFetch(apiList.contact.delete(id), { method: "DELETE" });
+      toast.success("Message deleted");
       await fetchMessages(page);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error deleting message", e);
+      toast.error(e?.message || "Failed to delete message");
     }
   };
 
@@ -113,126 +112,155 @@ export default function AdminContactPage() {
     fetchMessages(1);
   };
 
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    fetchMessages(nextPage);
+  };
+
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-2xl font-bold">Contact Messages</h1>
+    <div className='p-6 flex flex-col gap-6'>
+      <PageHeader
+        title='Contact Messages'
+        description='View and manage messages submitted from the public contact form'
+      />
 
-      {/* Filters */}
-      <form
-        onSubmit={handleSearchSubmit}
-        className="mb-4 flex flex-wrap items-center gap-3"
-      >
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
-        >
-          <option value="">All statuses</option>
-          <option value="new">New</option>
-          <option value="read">Read</option>
-          <option value="archived">Archived</option>
-        </select>
-
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, email, subject..."
-          className="w-64 rounded border border-gray-300 px-2 py-1 text-sm"
-        />
-
-        <button
-          type="submit"
-          className="rounded bg-black px-3 py-1 text-sm font-semibold text-white"
-        >
-          Search
-        </button>
-      </form>
-
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
-
-      {!loading && messages.length === 0 && (
-        <p className="text-sm text-gray-500">No messages found.</p>
-      )}
-
-      {!loading && messages.length > 0 && (
-        <div className="overflow-x-auto rounded border border-gray-200 bg-white">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Subject</th>
-                <th className="px-3 py-2">Message</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Created</th>
-                <th className="px-3 py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {messages.map((m) => (
-                <tr key={m._id} className="border-t">
-                  <td className="px-3 py-2">{m.name}</td>
-                  <td className="px-3 py-2">{m.email}</td>
-                  <td className="px-3 py-2">{m.subject}</td>
-                  <td className="px-3 py-2 max-w-xs truncate">{m.message}</td>
-                  <td className="px-3 py-2">{m.status}</td>
-                  <td className="px-3 py-2">
-                    {new Date(m.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 text-right space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => handleStatusChange(m._id, "read")}
-                      className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
-                    >
-                      Mark Read
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStatusChange(m._id, "archived")}
-                      className="rounded bg-gray-600 px-2 py-1 text-xs text-white"
-                    >
-                      Archive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(m._id)}
-                      className="rounded bg-red-600 px-2 py-1 text-xs text-white"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => fetchMessages(page - 1)}
-            className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>
+            Filter messages by status or search by name, email, or subject
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <form
+            onSubmit={handleSearchSubmit}
+            className='mb-4 flex flex-wrap items-center gap-3'
           >
-            Prev
-          </button>
-          <span className="text-sm">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => fetchMessages(page + 1)}
-            className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      )}
+            {/* Native select instead of Radix Select to avoid context errors */}
+            <div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className='h-9 rounded-md border border-input bg-background px-2 py-1 text-sm'
+              >
+                <option value=''>All statuses</option>
+                <option value='new'>New</option>
+                <option value='read'>Read</option>
+                <option value='archived'>Archived</option>
+              </select>
+            </div>
+
+            <div className='flex-1 min-w-[200px] max-w-xs'>
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder='Search name, email, subject...'
+              />
+            </div>
+
+            <Button type='submit' variant='default' size='sm'>
+              Search
+            </Button>
+          </form>
+
+          <Separator className='my-4' />
+
+          {loading && <p className='text-sm text-muted-foreground'>Loading…</p>}
+
+          {!loading && messages.length === 0 && (
+            <p className='text-sm text-muted-foreground'>No messages found.</p>
+          )}
+
+          {!loading && messages.length > 0 && (
+            <div className='overflow-x-auto rounded border border-gray-200 bg-white'>
+              <table className='min-w-full text-left text-sm'>
+                <thead className='bg-gray-50'>
+                  <tr>
+                    <th className='px-3 py-2'>Name</th>
+                    <th className='px-3 py-2'>Email</th>
+                    <th className='px-3 py-2'>Phone</th>
+                    <th className='px-3 py-2'>Subject</th>
+                    <th className='px-3 py-2'>Message</th>
+                    <th className='px-3 py-2'>Status</th>
+                    <th className='px-3 py-2'>Created</th>
+                    <th className='px-3 py-2 text-right'>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {messages.map((m) => (
+                    <tr key={m._id} className='border-t'>
+                      <td className='px-3 py-2'>{m.name}</td>
+                      <td className='px-3 py-2'>{m.email}</td>
+                      <td className='px-3 py-2'>{m.phone || "—"}</td>
+                      <td className='px-3 py-2'>{m.subject || "—"}</td>
+                      <td className='px-3 py-2 max-w-xs truncate'>
+                        {m.message}
+                      </td>
+                      <td className='px-3 py-2 capitalize'>{m.status}</td>
+                      <td className='px-3 py-2'>
+                        {new Date(m.createdAt).toLocaleString()}
+                      </td>
+                      <td className='px-3 py-2 text-right space-x-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          onClick={() => handleStatusChange(m._id, "read")}
+                        >
+                          Mark Read
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          onClick={() => handleStatusChange(m._id, "archived")}
+                        >
+                          Archive
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='destructive'
+                          onClick={() => handleDelete(m._id)}
+                        >
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className='mt-4 flex items-center gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={page <= 1}
+                onClick={() => handlePageChange(page - 1)}
+              >
+                Prev
+              </Button>
+              <span className='text-sm'>
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={page >= totalPages}
+                onClick={() => handlePageChange(page + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
