@@ -173,6 +173,15 @@ const apiList = {
     // helper to attach query params when needed
     withQuery,
   },
+  banners: {
+    // GET /api/banners?type=about|gallery
+    get: (type: "about" | "gallery") =>
+      withQuery(path("banners"), { type }),
+
+    // PUT /api/banners?type=about|gallery  (upsert)
+    update: (type: "about" | "gallery") =>
+      withQuery(path("banners"), { type }),
+  },
 
   upload: {
     image: `${API_BASE}/upload-image`,

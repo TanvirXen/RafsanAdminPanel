@@ -38,6 +38,7 @@ const navigation: NavItem[] = [
   { name: "Shots", href: "/admin/shots", icon: ImageIcon },
   { name: "Settings", href: "/admin/settings", icon: SettingsIcon },
   { name: "Newsletter", href: "/admin/newsletter", icon: Users },
+  { name: "Banners", href: "/admin/banners", icon: Users },
 ];
 
 function Sidebar({

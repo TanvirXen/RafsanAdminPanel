@@ -644,12 +644,12 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className='space-y-6'>
           <ImageUpload
-            label='About Image'
+            label='Story Teaser Image'
             value={aboutSection.image || ""}
             onChange={(value) =>
               setAboutSection((p) => ({ ...p, image: value }))
             }
-            placeholder='Upload or paste about image URL'
+            placeholder='Upload or paste story teaser image URL'
           />
 
           <Separator />
