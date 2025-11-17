@@ -35,10 +35,10 @@ const navigation: NavItem[] = [
   { name: "Timeline", href: "/admin/timeline", icon: TrendingUp },
   { name: "Notable Events", href: "/admin/notable-events", icon: Award },
   { name: "Brands", href: "/admin/brands", icon: Award },
+  { name: "Banners", href: "/admin/banners", icon: Users },
   { name: "Shots", href: "/admin/shots", icon: ImageIcon },
   { name: "Settings", href: "/admin/settings", icon: SettingsIcon },
   { name: "Newsletter", href: "/admin/newsletter", icon: Users },
-  { name: "Banners", href: "/admin/banners", icon: Users },
 ];
 
 function Sidebar({
