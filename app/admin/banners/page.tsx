@@ -94,9 +94,17 @@ export default function BannerSettingsPage() {
           "From the classrooms of IBA to the bright lights of the stage and screen.",
         ctaLabel: banner.ctaLabel || "Host | Content Creator | Storyteller",
         ctaHref: banner.ctaHref || "/about",
-        mobileImage: banner.mobileImage || "/assets/aboutBanner.png",
-        desktopImage: banner.desktopImage || "/assets/aboutBannerD.png",
-        heroImage: banner.heroImage || "/assets/mediaB.jpg",
+        mobileImage:
+          banner.mobileImage ||
+          (isAboutType ? "/assets/aboutBanner.png" : "/assets/aboutBanner.png"),
+        desktopImage:
+          banner.desktopImage ||
+          (isAboutType
+            ? "/assets/aboutBannerD.png"
+            : "/assets/aboutBannerD.png"),
+        heroImage:
+          banner.heroImage ||
+          (isGalleryType ? "/assets/mediaB.jpg" : "/assets/mediaB.jpg"),
         alt: banner.alt || "Media Gallery hero",
       });
     } catch (e: any) {
@@ -203,6 +211,8 @@ export default function BannerSettingsPage() {
           {isAbout && (
             <div className='grid gap-4 md:grid-cols-2'>
               <ImageUpload
+                // 🔑 Key forces remount when the URL changes so preview updates
+                key={form.mobileImage || "about-mobile-default"}
                 label='Mobile / Tablet Image'
                 value={form.mobileImage || "/assets/aboutBanner.png"}
                 onChange={(value) =>
@@ -211,6 +221,7 @@ export default function BannerSettingsPage() {
                 placeholder='/assets/aboutBanner.png'
               />
               <ImageUpload
+                key={form.desktopImage || "about-desktop-default"}
                 label='Desktop Image'
                 value={form.desktopImage || "/assets/aboutBannerD.png"}
                 onChange={(value) =>
@@ -224,6 +235,7 @@ export default function BannerSettingsPage() {
           {isGallery && (
             <div className='space-y-4'>
               <ImageUpload
+                key={form.heroImage || "gallery-hero-default"}
                 label='Hero Image'
                 value={form.heroImage || "/assets/mediaB.jpg"}
                 onChange={(value) =>
