@@ -1,22 +1,30 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ImageUpload } from "@/components/admin/image-upload";
 
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { ImageUpload } from "@/components/admin/image-upload"
-
-interface TimelineFormProps {
-  initialData?: any
-  onSave: (data: any) => void
-  onCancel: () => void
+export interface TimelineFormData {
+  title: string;
+  date: string;
+  imageLink: string;
+  description: string;
+  cardUrl?: string;
+  slotKey?: string;
+  section?: "journey" | "setback" | "";
 }
 
-// Same options as backend SLOT_KEYS
-const SLOT_OPTIONS: { value: string; label: string }[] = [
+interface TimelineFormProps {
+  initialData?: Partial<TimelineFormData>;
+  onSave: (data: TimelineFormData) => void;
+  onCancel: () => void;
+}
+
+const SLOT_OPTIONS = [
   { value: "", label: "— Not mapped / generic —" },
   { value: "journeyHero", label: "Journey • Hero card" },
   { value: "journey1Left", label: "Journey 1 • Left" },
@@ -30,74 +38,73 @@ const SLOT_OPTIONS: { value: string; label: string }[] = [
   { value: "setbackMainRight", label: "Setback • Main Right" },
   { value: "setbackMosaicLeft", label: "Setback Mosaic • Left" },
   { value: "setbackMosaicTopRight", label: "Setback Mosaic • Top Right" },
-  {
-    value: "setbackMosaicBottomRight",
-    label: "Setback Mosaic • Bottom Right",
-  },
-]
+  { value: "setbackMosaicBottomRight", label: "Setback Mosaic • Bottom Right" },
+];
 
-// Helper: backend sends ISO, input[type=date] wants yyyy-MM-dd
-function normalizeDateForInput(raw: string | undefined): string {
-  if (!raw) return ""
-  // If it's already yyyy-MM-dd just return it
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) return ""
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, "0")
-  const dd = String(d.getDate()).padStart(2, "0")
-  return `${yyyy}-${mm}-${dd}`
+function normalizeDateForInput(raw?: string): string {
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-export function TimelineForm({ initialData, onSave, onCancel }: TimelineFormProps) {
-  const [formData, setFormData] = useState({
+export function TimelineForm({
+  initialData,
+  onSave,
+  onCancel,
+}: TimelineFormProps) {
+  const [formData, setFormData] = useState<TimelineFormData>({
     title: initialData?.title || "",
     date: normalizeDateForInput(initialData?.date),
     imageLink: initialData?.imageLink || "",
     description: initialData?.description || "",
     cardUrl: initialData?.cardUrl || "",
     slotKey: initialData?.slotKey || "",
-  })
+    section: (initialData?.section as any) || "",
+  });
 
-  // If initialData changes (editing a different row), sync into state
   useEffect(() => {
-    if (!initialData) return
+    if (!initialData) return;
     setFormData({
-      title: initialData?.title || "",
-      date: normalizeDateForInput(initialData?.date),
-      imageLink: initialData?.imageLink || "",
-      description: initialData?.description || "",
-      cardUrl: initialData?.cardUrl || "",
-      slotKey: initialData?.slotKey || "",
-    })
-  }, [initialData])
+      title: initialData.title || "",
+      date: normalizeDateForInput(initialData.date),
+      imageLink: initialData.imageLink || "",
+      description: initialData.description || "",
+      cardUrl: initialData.cardUrl || "",
+      slotKey: initialData.slotKey || "",
+      section: (initialData.section as any) || "",
+    });
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // onSave will handle converting date → ISO & sending to backend
-    onSave(formData)
-  }
+    e.preventDefault();
+    onSave(formData);
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className='space-y-6'>
       {/* Title */}
-      <div className="space-y-2">
-        <Label htmlFor="title">Title</Label>
+      <div className='space-y-2'>
+        <Label htmlFor='title'>Title</Label>
         <Input
-          id="title"
+          id='title'
           value={formData.title}
           onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          placeholder="e.g., Company Founded"
+          placeholder='e.g., Company Founded'
           required
         />
       </div>
 
       {/* Date */}
-      <div className="space-y-2">
-        <Label htmlFor="date">Date</Label>
+      <div className='space-y-2'>
+        <Label htmlFor='date'>Date</Label>
         <Input
-          id="date"
-          type="date"
+          id='date'
+          type='date'
           value={formData.date}
           onChange={(e) => setFormData({ ...formData, date: e.target.value })}
           required
@@ -106,18 +113,18 @@ export function TimelineForm({ initialData, onSave, onCancel }: TimelineFormProp
 
       {/* Image */}
       <ImageUpload
-        label="Timeline Image"
+        label='Timeline Image'
         value={formData.imageLink}
         onChange={(value) => setFormData({ ...formData, imageLink: value })}
-        placeholder="Upload or paste timeline image URL"
+        placeholder='Upload or paste timeline image URL'
         required
       />
 
       {/* Description */}
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
+      <div className='space-y-2'>
+        <Label htmlFor='description'>Description</Label>
         <Textarea
-          id="description"
+          id='description'
           value={formData.description}
           onChange={(e) =>
             setFormData({ ...formData, description: e.target.value })
@@ -128,48 +135,72 @@ export function TimelineForm({ initialData, onSave, onCancel }: TimelineFormProp
       </div>
 
       {/* Card URL */}
-      <div className="space-y-2">
-        <Label htmlFor="cardUrl">Card URL (Optional)</Label>
+      <div className='space-y-2'>
+        <Label htmlFor='cardUrl'>Card URL (Optional)</Label>
         <Input
-          id="cardUrl"
+          id='cardUrl'
           value={formData.cardUrl}
           onChange={(e) =>
             setFormData({ ...formData, cardUrl: e.target.value })
           }
-          placeholder="/timeline/..."
+          placeholder='/timeline/...'
         />
       </div>
 
-      {/* Slot mapping */}
-      <div className="space-y-2">
-        <Label htmlFor="slotKey">Front-end Slot (optional)</Label>
+      {/* Section */}
+      <div className='space-y-2'>
+        <Label htmlFor='section'>Section (optional)</Label>
         <select
-          id="slotKey"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          id='section'
+          className='w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+          value={formData.section || ""}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              section: e.target.value as TimelineFormData["section"],
+            })
+          }
+        >
+          <option value=''>— Not set —</option>
+          <option value='journey'>Journey</option>
+          <option value='setback'>Setback</option>
+        </select>
+        <p className='mt-1 text-xs text-muted-foreground'>
+          Use this when the card is not mapped to a fixed slot but should appear
+          in Journey or Setback zig-zag list.
+        </p>
+      </div>
+
+      {/* Slot Key */}
+      <div className='space-y-2'>
+        <Label htmlFor='slotKey'>Front-end Slot (optional)</Label>
+        <select
+          id='slotKey'
+          className='w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
           value={formData.slotKey}
           onChange={(e) =>
             setFormData({ ...formData, slotKey: e.target.value })
           }
         >
           {SLOT_OPTIONS.map((opt) => (
-            <option key={opt.value || "none"} value={opt.value}>
+            <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Choose where this card will appear in the About page (Journey / Setback).  
-          Leave it as &quot;Not mapped&quot; if it&apos;s just a generic timeline entry.
+        <p className='mt-1 text-xs text-muted-foreground'>
+          Choose where this card appears in About Page. Leave unselected for
+          generic timeline items.
         </p>
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-3">
-        <Button type="button" variant="outline" onClick={onCancel}>
+      <div className='flex justify-end gap-3'>
+        <Button type='button' variant='outline' onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">Save</Button>
+        <Button type='submit'>Save</Button>
       </div>
     </form>
-  )
+  );
 }
