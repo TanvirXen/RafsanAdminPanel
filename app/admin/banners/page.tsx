@@ -79,18 +79,20 @@ export default function BannerSettingsPage() {
       );
       const banner = json.banner || {};
 
+      const isAboutType = type === "about";
+      const isGalleryType = type === "gallery";
+
       setForm({
-        title: banner.title || (isAbout ? "RAFSAN SABAB" : "Media Gallery"),
+        title: banner.title || (isAboutType ? "RAFSAN SABAB" : "Media Gallery"),
         subtitle:
           banner.subtitle ||
-          (isGallery
+          (isGalleryType
             ? "Some of the remarkable events that I have had the privilege to host."
             : ""),
         kicker:
           banner.kicker ||
           "From the classrooms of IBA to the bright lights of the stage and screen.",
-        ctaLabel:
-          banner.ctaLabel || "Host | Content Creator | Storyteller",
+        ctaLabel: banner.ctaLabel || "Host | Content Creator | Storyteller",
         ctaHref: banner.ctaHref || "/about",
         mobileImage: banner.mobileImage || "/assets/aboutBanner.png",
         desktopImage: banner.desktopImage || "/assets/aboutBannerD.png",
@@ -154,17 +156,17 @@ export default function BannerSettingsPage() {
   };
 
   return (
-    <div className="p-6 flex flex-col gap-6">
+    <div className='p-6 flex flex-col gap-6'>
       <PageHeader
-        title="Banner Settings"
-        description="Manage About and Gallery hero banners"
+        title='Banner Settings'
+        description='Manage About and Gallery hero banners'
       />
 
       {/* toggle */}
-      <div className="flex justify-end">
-        <div className="inline-flex rounded-full border border-gray-300 overflow-hidden text-sm">
+      <div className='flex justify-end'>
+        <div className='inline-flex rounded-full border border-gray-300 overflow-hidden text-sm'>
           <button
-            type="button"
+            type='button'
             onClick={() => setActiveType("about")}
             className={`px-4 py-2 ${
               activeType === "about" ? "bg-black text-white" : "bg-white"
@@ -173,7 +175,7 @@ export default function BannerSettingsPage() {
             About Banner
           </button>
           <button
-            type="button"
+            type='button'
             onClick={() => setActiveType("gallery")}
             className={`px-4 py-2 ${
               activeType === "gallery" ? "bg-black text-white" : "bg-white"
@@ -186,9 +188,7 @@ export default function BannerSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {isAbout ? "About Banner" : "Gallery Banner"}
-          </CardTitle>
+          <CardTitle>{isAbout ? "About Banner" : "Gallery Banner"}</CardTitle>
           <CardDescription>
             {isAbout
               ? "Controls the hero banner on the About page."
@@ -196,51 +196,49 @@ export default function BannerSettingsPage() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-6">
-          {loading && (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          )}
+        <CardContent className='space-y-6'>
+          {loading && <p className='text-sm text-muted-foreground'>Loading…</p>}
 
           {/* Images */}
           {isAbout && (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className='grid gap-4 md:grid-cols-2'>
               <ImageUpload
-                label="Mobile / Tablet Image"
-                value={form.mobileImage}
+                label='Mobile / Tablet Image'
+                value={form.mobileImage || "/assets/aboutBanner.png"}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, mobileImage: value }))
                 }
-                placeholder="/assets/aboutBanner.png"
+                placeholder='/assets/aboutBanner.png'
               />
               <ImageUpload
-                label="Desktop Image"
-                value={form.desktopImage}
+                label='Desktop Image'
+                value={form.desktopImage || "/assets/aboutBannerD.png"}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, desktopImage: value }))
                 }
-                placeholder="/assets/aboutBannerD.png"
+                placeholder='/assets/aboutBannerD.png'
               />
             </div>
           )}
 
           {isGallery && (
-            <div className="space-y-4">
+            <div className='space-y-4'>
               <ImageUpload
-                label="Hero Image"
-                value={form.heroImage}
+                label='Hero Image'
+                value={form.heroImage || "/assets/mediaB.jpg"}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, heroImage: value }))
                 }
-                placeholder="/assets/mediaB.jpg"
+                placeholder='/assets/mediaB.jpg'
               />
-              <div className="space-y-2">
-                <Label htmlFor="alt">Hero Alt Text</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='alt'>Hero Alt Text</Label>
                 <Input
-                  id="alt"
-                  name="alt"
+                  id='alt'
+                  name='alt'
                   value={form.alt}
                   onChange={handleInputChange}
-                  placeholder="Media Gallery hero"
+                  placeholder='Media Gallery hero'
                 />
               </div>
             </div>
@@ -249,26 +247,26 @@ export default function BannerSettingsPage() {
           <Separator />
 
           {/* Text content */}
-          <div className="space-y-4">
+          <div className='space-y-4'>
             {isAbout && (
-              <div className="space-y-2">
-                <Label htmlFor="kicker">Kicker / Intro Line</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='kicker'>Kicker / Intro Line</Label>
                 <Textarea
-                  id="kicker"
-                  name="kicker"
+                  id='kicker'
+                  name='kicker'
                   rows={2}
                   value={form.kicker}
                   onChange={handleInputChange}
-                  placeholder="From the classrooms of IBA to the bright lights of the stage and screen."
+                  placeholder='From the classrooms of IBA to the bright lights of the stage and screen.'
                 />
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
+            <div className='space-y-2'>
+              <Label htmlFor='title'>Title</Label>
               <Input
-                id="title"
-                name="title"
+                id='title'
+                name='title'
                 value={form.title}
                 onChange={handleInputChange}
                 placeholder={isAbout ? "RAFSAN SABAB" : "Media Gallery"}
@@ -276,53 +274,53 @@ export default function BannerSettingsPage() {
             </div>
 
             {isGallery && (
-              <div className="space-y-2">
-                <Label htmlFor="subtitle">Subtitle</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='subtitle'>Subtitle</Label>
                 <Textarea
-                  id="subtitle"
-                  name="subtitle"
+                  id='subtitle'
+                  name='subtitle'
                   rows={2}
                   value={form.subtitle}
                   onChange={handleInputChange}
-                  placeholder="Some of the remarkable events that I have had the privilege to host."
+                  placeholder='Some of the remarkable events that I have had the privilege to host.'
                 />
               </div>
             )}
 
             {isAbout && (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="ctaLabel">CTA Label</Label>
+              <div className='grid gap-4 md:grid-cols-2'>
+                <div className='space-y-2'>
+                  <Label htmlFor='ctaLabel'>CTA Label</Label>
                   <Input
-                    id="ctaLabel"
-                    name="ctaLabel"
+                    id='ctaLabel'
+                    name='ctaLabel'
                     value={form.ctaLabel}
                     onChange={handleInputChange}
-                    placeholder="Host | Content Creator | Storyteller"
+                    placeholder='Host | Content Creator | Storyteller'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ctaHref">CTA Link</Label>
+                <div className='space-y-2'>
+                  <Label htmlFor='ctaHref'>CTA Link</Label>
                   <Input
-                    id="ctaHref"
-                    name="ctaHref"
+                    id='ctaHref'
+                    name='ctaHref'
                     value={form.ctaHref}
                     onChange={handleInputChange}
-                    placeholder="/about"
+                    placeholder='/about'
                   />
                 </div>
               </div>
             )}
           </div>
 
-          <div className="flex justify-end pt-4">
+          <div className='flex justify-end pt-4'>
             <Button
-              type="button"
+              type='button'
               onClick={handleSave}
               disabled={saving}
-              className="gap-2"
+              className='gap-2'
             >
-              <Save className="h-4 w-4" />
+              <Save className='h-4 w-4' />
               {saving ? "Saving…" : "Save Banner"}
             </Button>
           </div>

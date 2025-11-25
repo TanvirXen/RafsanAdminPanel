@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload } from "@/components/admin/image-upload";
 
 export interface TimelineFormData {
-  title: string;
+  // title: string;
   date: string;
   imageLink: string;
   description: string;
@@ -58,7 +58,7 @@ export function TimelineForm({
   onCancel,
 }: TimelineFormProps) {
   const [formData, setFormData] = useState<TimelineFormData>({
-    title: initialData?.title || "",
+    // title: initialData?.title || "",
     date: normalizeDateForInput(initialData?.date),
     imageLink: initialData?.imageLink || "",
     description: initialData?.description || "",
@@ -70,7 +70,7 @@ export function TimelineForm({
   useEffect(() => {
     if (!initialData) return;
     setFormData({
-      title: initialData.title || "",
+      // title: initialData.title || "",
       date: normalizeDateForInput(initialData.date),
       imageLink: initialData.imageLink || "",
       description: initialData.description || "",
@@ -88,7 +88,7 @@ export function TimelineForm({
   return (
     <form onSubmit={handleSubmit} className='space-y-6'>
       {/* Title */}
-      <div className='space-y-2'>
+      {/* <div className='space-y-2'>
         <Label htmlFor='title'>Title</Label>
         <Input
           id='title'
@@ -97,7 +97,7 @@ export function TimelineForm({
           placeholder='e.g., Company Founded'
           required
         />
-      </div>
+      </div> */}
 
       {/* Date */}
       <div className='space-y-2'>
