@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   LogOut,
   ImageIcon,
+  UserCog,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -28,6 +29,7 @@ type NavItem = {
 
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { name: "Users", href: "/admin/users", icon: UserCog },
   { name: "Shows", href: "/admin/shows", icon: Film },
   { name: "Events", href: "/admin/events", icon: Calendar },
   { name: "Registrations", href: "/admin/registrations", icon: Users },
@@ -45,10 +47,16 @@ const navigation: NavItem[] = [
 function Sidebar({
   onLogout,
   currentPath,
+  userRole,
 }: {
   onLogout: () => void;
   currentPath: string;
+  userRole?: "admin" | "editor";
 }) {
+  const visibleNavigation = navigation.filter(
+    (item) => item.href !== "/admin/users" || userRole === "admin"
+  );
+
   return (
     <div className='flex h-full flex-col gap-2'>
       <div className='flex h-14 items-center border-b px-4 lg:h-16 lg:px-6'>
@@ -59,7 +67,7 @@ function Sidebar({
       </div>
 
       <nav className='flex-1 space-y-1 px-3 py-4'>
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           // ✅ Only mark Dashboard active on EXACT "/admin"
           const active =
             item.href === "/admin"
@@ -123,7 +131,7 @@ export default function AdminLayout({
     <div className='flex h-screen'>
       {/* Desktop Sidebar */}
       <aside className='hidden w-64 border-r bg-background lg:block'>
-        <Sidebar onLogout={logout} currentPath={pathname} />
+        <Sidebar onLogout={logout} currentPath={pathname} userRole={user?.role} />
       </aside>
 
       {/* Mobile Header + Drawer */}
@@ -137,7 +145,11 @@ export default function AdminLayout({
                 </Button>
               </SheetTrigger>
               <SheetContent side='left' className='w-64 p-0'>
-                <Sidebar onLogout={logout} currentPath={pathname} />
+                <Sidebar
+                  onLogout={logout}
+                  currentPath={pathname}
+                  userRole={user?.role}
+                />
               </SheetContent>
             </Sheet>
             <Link
