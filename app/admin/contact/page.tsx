@@ -4,9 +4,11 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import apiList from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -16,7 +18,10 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { FileSpreadsheet } from "lucide-react";
 import { toast } from "react-toastify";
+import { downloadFile } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
 
 type ContactMessage = {
   _id: string;
@@ -44,6 +49,8 @@ export default function AdminContactPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const fetchMessages = async (pageToLoad = 1) => {
     try {
@@ -75,6 +82,16 @@ export default function AdminContactPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  useAdminSync("contact", () => {
+    void fetchMessages(page);
+  });
+
+  useEffect(() => {
+    setSelectedIds((prev) =>
+      prev.filter((id) => messages.some((message) => message._id === id))
+    );
+  }, [messages]);
+
   const handleStatusChange = async (
     id: string,
     status: ContactMessage["status"]
@@ -88,6 +105,7 @@ export default function AdminContactPage() {
 
       toast.success("Status updated");
       await fetchMessages(page);
+      broadcastAdminSync("contact");
     } catch (e: any) {
       console.error("Error updating status", e);
       toast.error(e?.message || "Failed to update status");
@@ -101,6 +119,7 @@ export default function AdminContactPage() {
       await apiFetch(apiList.contact.delete(id), { method: "DELETE" });
       toast.success("Message deleted");
       await fetchMessages(page);
+      broadcastAdminSync("contact");
     } catch (e: any) {
       console.error("Error deleting message", e);
       toast.error(e?.message || "Failed to delete message");
@@ -117,11 +136,85 @@ export default function AdminContactPage() {
     fetchMessages(nextPage);
   };
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      await downloadFile(
+        apiList.contact.export({
+          status: statusFilter || undefined,
+          search: search || undefined,
+        }),
+        {},
+        { fallbackFilename: "contact-messages.csv" }
+      );
+      toast.success("Contact export downloaded");
+    } catch (e: any) {
+      console.error("Error exporting contact messages", e);
+      toast.error(e?.message || "Failed to export contact messages");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const selectedMessages = messages.filter((message) =>
+      selectedIds.includes(message._id)
+    );
+    if (!selectedMessages.length) return;
+
+    const confirmed = confirm(
+      `Delete ${selectedMessages.length} selected message${
+        selectedMessages.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!confirmed) return;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedMessages,
+      (message) =>
+        apiFetch(apiList.contact.delete(message._id), { method: "DELETE" })
+    );
+
+    await fetchMessages(page);
+    broadcastAdminSync("contact");
+    setSelectedIds([]);
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} contact message${
+          successCount === 1 ? "" : "s"
+        } deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(
+        errors[0] || `Failed to delete ${failureCount} contact message(s)`
+      );
+    }
+  };
+
+  const allSelected =
+    messages.length > 0 && selectedIds.length === messages.length;
+  const someSelected = selectedIds.length > 0 && !allSelected;
+
   return (
     <div className='p-6 flex flex-col gap-6'>
       <PageHeader
         title='Contact Messages'
         description='View and manage messages submitted from the public contact form'
+        actions={
+          <Button
+            type='button'
+            variant='outline'
+            className='gap-2'
+            onClick={handleExport}
+            disabled={loading || exporting}
+          >
+            <FileSpreadsheet className='h-4 w-4' />
+            {exporting ? "Exporting..." : "Export to Excel"}
+          </Button>
+        }
       />
 
       <Card>
@@ -162,6 +255,16 @@ export default function AdminContactPage() {
             <Button type='submit' variant='default' size='sm'>
               Search
             </Button>
+            {selectedIds.length > 0 && (
+              <Button
+                type='button'
+                variant='destructive'
+                size='sm'
+                onClick={handleBulkDelete}
+              >
+                Delete Selected ({selectedIds.length})
+              </Button>
+            )}
           </form>
 
           <Separator className='my-4' />
@@ -177,6 +280,17 @@ export default function AdminContactPage() {
               <table className='min-w-full text-left text-sm'>
                 <thead className='bg-gray-50'>
                   <tr>
+                    <th className='px-3 py-2'>
+                      <Checkbox
+                        aria-label='Select all messages'
+                        checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                        onCheckedChange={(checked) =>
+                          setSelectedIds(
+                            checked === true ? messages.map((message) => message._id) : []
+                          )
+                        }
+                      />
+                    </th>
                     <th className='px-3 py-2'>Name</th>
                     <th className='px-3 py-2'>Email</th>
                     <th className='px-3 py-2'>Phone</th>
@@ -190,6 +304,19 @@ export default function AdminContactPage() {
                 <tbody>
                   {messages.map((m) => (
                     <tr key={m._id} className='border-t'>
+                      <td className='px-3 py-2 align-top'>
+                        <Checkbox
+                          aria-label='Select message'
+                          checked={selectedIds.includes(m._id)}
+                          onCheckedChange={(checked) =>
+                            setSelectedIds((prev) =>
+                              checked === true
+                                ? Array.from(new Set([...prev, m._id]))
+                                : prev.filter((id) => id !== m._id)
+                            )
+                          }
+                        />
+                      </td>
                       <td className='px-3 py-2'>{m.name}</td>
                       <td className='px-3 py-2'>{m.email}</td>
                       <td className='px-3 py-2'>{m.phone || "—"}</td>

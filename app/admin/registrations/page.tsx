@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
+import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -24,8 +27,16 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Mail, Phone, Calendar, DollarSign } from "lucide-react";
+import {
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  DollarSign,
+  FileSpreadsheet,
+} from "lucide-react";
 import { toast } from "react-toastify";
+import { downloadFile } from "@/lib/api-fetch";
 
 type RegStatus = "pending" | "approved" | "rejected";
 
@@ -83,9 +94,14 @@ function renderValue(v: any): string {
 
 export default function RegistrationsPage() {
   const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRows, setTotalRows] = useState(0);
+  const PAGE_SIZE = 20;
 
   const [rows, setRows] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Filters
   const [dateFrom, setDateFrom] = useState("");
@@ -96,17 +112,22 @@ export default function RegistrationsPage() {
   const [selected, setSelected] = useState<Registration | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const load = async () => {
+  const load = async (pageToLoad = page) => {
     try {
       setLoading(true);
       const url = withQuery(apiList.registrations.list, {
         from: dateFrom || undefined,
         to: dateTo || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
-        limit: 100,
+        page: pageToLoad,
+        limit: PAGE_SIZE,
       });
       const j = await apiFetch<ApiListResponse>(url);
+      const pagination = resolvePagination(j, PAGE_SIZE);
       setRows(j.registrations || []);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+      setTotalRows(pagination.total);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load registrations");
     } finally {
@@ -119,11 +140,18 @@ export default function RegistrationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
+  useAdminSync("registrations", () => {
+    if (authLoading) return;
+    void load();
+  });
+
   const clearFilters = () => {
     setDateFrom("");
     setDateTo("");
     setStatusFilter("all");
-    setTimeout(load, 0);
+    setTimeout(() => {
+      void load(1);
+    }, 0);
   };
 
   const approve = async (id: string) => {
@@ -137,6 +165,8 @@ export default function RegistrationsPage() {
       );
       setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
       setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
+      await load();
+      broadcastAdminSync("registrations");
       toast.success("Registration approved");
     } catch (e: any) {
       toast.error(e?.message || "Failed to approve");
@@ -154,6 +184,8 @@ export default function RegistrationsPage() {
       );
       setRows((prev) => prev.map((r) => (r._id === id ? j.registration : r)));
       setSelected((prev) => (prev && prev._id === id ? j.registration : prev));
+      await load();
+      broadcastAdminSync("registrations");
       toast.success("Registration rejected");
     } catch (e: any) {
       toast.error(e?.message || "Failed to reject");
@@ -173,10 +205,65 @@ export default function RegistrationsPage() {
       await apiFetch(apiList.registrations.delete(reg._id), {
         method: "DELETE",
       });
-      setRows((prev) => prev.filter((r) => r._id !== reg._id));
+      await load();
+      broadcastAdminSync("registrations");
       toast.success("Registration deleted");
     } catch (e: any) {
       toast.error(e?.message || "Failed to delete");
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      await downloadFile(
+        withQuery(apiList.registrations.export, {
+          from: dateFrom || undefined,
+          to: dateTo || undefined,
+          status: statusFilter === "all" ? undefined : statusFilter,
+        }),
+        {},
+        { fallbackFilename: "registrations.csv" }
+      );
+      toast.success("Registrations export downloaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to export registrations");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleBulkDelete = async (selectedRegistrations: Registration[]) => {
+    const confirmed = confirm(
+      `Delete ${selectedRegistrations.length} selected registration${
+        selectedRegistrations.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!confirmed) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedRegistrations,
+      (registration) =>
+        apiFetch(apiList.registrations.delete(registration._id), {
+          method: "DELETE",
+        })
+    );
+
+    await load();
+    broadcastAdminSync("registrations");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} registration${
+          successCount === 1 ? "" : "s"
+        } deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(
+        errors[0] || `Failed to delete ${failureCount} registration(s)`
+      );
     }
   };
 
@@ -276,6 +363,17 @@ export default function RegistrationsPage() {
       <PageHeader
         title='Registrations'
         description='Manage event registrations and attendees'
+        actions={
+          <Button
+            variant='outline'
+            className='gap-2'
+            onClick={handleExport}
+            disabled={loading || exporting}
+          >
+            <FileSpreadsheet className='h-4 w-4' />
+            {exporting ? "Exporting..." : "Export to Excel"}
+          </Button>
+        }
       />
 
       {/* Filters */}
@@ -316,7 +414,7 @@ export default function RegistrationsPage() {
           </Select>
         </div>
         <div className='flex gap-2'>
-          <Button onClick={load} disabled={loading}>
+          <Button onClick={() => void load(1)} disabled={loading}>
             Apply
           </Button>
           {(dateFrom || dateTo || statusFilter !== "all") && (
@@ -335,7 +433,14 @@ export default function RegistrationsPage() {
           setIsDialogOpen(true);
         }}
         onDelete={remove}
+        onBulkDelete={handleBulkDelete}
         searchPlaceholder='Search registrations...'
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalRows}
+        paginationLabel='registrations'
+        onPageChange={(nextPage) => void load(nextPage)}
+        isPageLoading={loading}
       />
 
       {/* Details / Approve / Reject */}

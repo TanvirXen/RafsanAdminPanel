@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import apiList from "@/apiList";
+import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { resolvePagination } from "@/lib/pagination";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
+import { PaginationControls } from "@/components/admin/pagination-controls";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +29,18 @@ interface Shot {
   sequence: number;
 }
 
+type ShotsResponse = {
+  shots: Shot[];
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+};
+
+const PAGE_SIZE = 9;
+
 export default function ShotsPage() {
   const [shots, setShots] = useState<Shot[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -33,6 +48,9 @@ export default function ShotsPage() {
   const [formData, setFormData] = useState<{ image: string; sequence: number }>(
     { image: "", sequence: 1 }
   );
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalShots, setTotalShots] = useState(0);
 
   // -------- confirmation modal (promise-based) --------
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -56,22 +74,37 @@ export default function ShotsPage() {
     confirmResolveRef.current = undefined;
   };
 
+  const loadShots = async (pageToLoad = page) => {
+    try {
+      const j = await apiFetch<ShotsResponse>(
+        withQuery(apiList.shots.list, {
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+        })
+      );
+      const pagination = resolvePagination(j, PAGE_SIZE);
+      setShots((j.shots || []).sort((a, b) => a.sequence - b.sequence));
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+      setTotalShots(pagination.total);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load shots");
+    }
+  };
+
   // -------- load --------
   useEffect(() => {
-    (async () => {
-      try {
-        const j = await apiFetch<{ shots: Shot[] }>(apiList.shots.list);
-        setShots((j.shots || []).sort((a, b) => a.sequence - b.sequence));
-      } catch (e: any) {
-        toast.error(e?.message || "Failed to load shots");
-      }
-    })();
+    void loadShots();
   }, []);
+
+  useAdminSync("shots", () => {
+    void loadShots(page);
+  });
 
   // -------- CRUD --------
   const handleAdd = () => {
     setEditingShot(null);
-    setFormData({ image: "", sequence: (shots?.length || 0) + 1 });
+    setFormData({ image: "", sequence: totalShots + 1 });
     setIsDialogOpen(true);
   };
 
@@ -90,7 +123,8 @@ export default function ShotsPage() {
 
     try {
       await apiFetch(apiList.shots.delete(shot._id), { method: "DELETE" });
-      setShots((prev) => prev.filter((s) => s._id !== shot._id));
+      await loadShots();
+      broadcastAdminSync("shots");
       toast.success("Shot deleted");
     } catch (e: any) {
       toast.error(e?.message || "Failed to delete shot");
@@ -109,31 +143,21 @@ export default function ShotsPage() {
 
     try {
       if (editingShot) {
-        const j = await apiFetch<{ shot: Shot }>(
-          apiList.shots.update(editingShot._id),
-          {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          }
-        );
-        setShots((prev) =>
-          prev
-            .map((s) => (s._id === editingShot._id ? j.shot : s))
-            .sort((a, b) => a.sequence - b.sequence)
-        );
+        await apiFetch<{ shot: Shot }>(apiList.shots.update(editingShot._id), {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
         toast.success("Shot updated");
-        setIsDialogOpen(false);
       } else {
-        const j = await apiFetch<{ shot: Shot }>(apiList.shots.create, {
+        await apiFetch<{ shot: Shot }>(apiList.shots.create, {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        setShots((prev) =>
-          [...prev, j.shot].sort((a, b) => a.sequence - b.sequence)
-        );
         toast.success("Shot created");
-        setIsDialogOpen(false);
       }
+      await loadShots();
+      broadcastAdminSync("shots");
+      setIsDialogOpen(false);
     } catch (e: any) {
       toast.error(
         e?.message ||
@@ -174,6 +198,8 @@ export default function ShotsPage() {
           }),
         }),
       ]);
+      await loadShots();
+      broadcastAdminSync("shots");
     } catch {
       setShots(original); // revert on failure
       toast.error("Failed to persist new order");
@@ -254,6 +280,14 @@ export default function ShotsPage() {
           </Card>
         ))}
       </div>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalShots}
+        currentCount={shots.length}
+        itemLabel='shots'
+        onPageChange={(nextPage) => void loadShots(nextPage)}
+      />
 
       {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

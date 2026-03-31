@@ -3,7 +3,10 @@
 import React, { useEffect, useState } from "react";
 import apiList from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { resolvePagination } from "@/lib/pagination";
+import { broadcastAdminSync } from "@/hooks/use-admin-sync";
 import { PageHeader } from "@/components/admin/page-header";
+import { PaginationControls } from "@/components/admin/pagination-controls";
 import {
   Card,
   CardContent,
@@ -16,8 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Users, Mail, Clock, Save } from "lucide-react";
+import { Users, Mail, Clock, Save, FileSpreadsheet } from "lucide-react";
 import { toast } from "react-toastify";
+import { downloadFile } from "@/lib/api-fetch";
 
 type NewsletterSettingsDto = {
   title: string;
@@ -32,6 +36,22 @@ type SubscriberDto = {
   source?: string;
   createdAt: string;
 };
+
+type SubscribersResponse = {
+  subscribers: SubscriberDto[];
+  total?: number;
+  page?: number;
+  pages?: number;
+  limit?: number;
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+};
+
+const PAGE_SIZE = 20;
 
 const defaultSettings: NewsletterSettingsDto = {
   title: "Subscribe to\nMy Newsletter!",
@@ -50,6 +70,28 @@ export default function NewsletterAdminPage() {
   const [loadingSubs, setLoadingSubs] = useState(true);
   const [subscribers, setSubscribers] = useState<SubscriberDto[]>([]);
   const [totalSubs, setTotalSubs] = useState<number | null>(null);
+  const [exportingSubs, setExportingSubs] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const loadSubscribers = async (pageToLoad = 1) => {
+    try {
+      setLoadingSubs(true);
+      const data = await apiFetch<SubscribersResponse>(
+        `${apiList.newsletter.listSubscribers}?page=${pageToLoad}&limit=${PAGE_SIZE}`
+      );
+      const pagination = resolvePagination(data, PAGE_SIZE);
+      setSubscribers(data.subscribers || []);
+      setTotalSubs(pagination.total);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+    } catch (err: any) {
+      console.error("Failed to load newsletter subscribers", err);
+      toast.error(err?.message || "Failed to load subscribers");
+    } finally {
+      setLoadingSubs(false);
+    }
+  };
 
   // ----- Load settings & subscribers on mount -----
   useEffect(() => {
@@ -74,25 +116,8 @@ export default function NewsletterAdminPage() {
       }
     };
 
-    const loadSubscribers = async () => {
-      try {
-        const data = await apiFetch<{
-          subscribers: SubscriberDto[];
-          total?: number;
-        }>(`${apiList.newsletter.listSubscribers}?limit=100`);
-        if (!alive) return;
-        setSubscribers(data.subscribers || []);
-        setTotalSubs(typeof data.total === "number" ? data.total : null);
-      } catch (err: any) {
-        console.error("Failed to load newsletter subscribers", err);
-        toast.error(err?.message || "Failed to load subscribers");
-      } finally {
-        if (alive) setLoadingSubs(false);
-      }
-    };
-
     loadSettings();
-    loadSubscribers();
+    void loadSubscribers(1);
 
     return () => {
       alive = false;
@@ -114,6 +139,7 @@ export default function NewsletterAdminPage() {
         method: "PUT",
         body: JSON.stringify(settings),
       });
+      broadcastAdminSync("newsletter");
       toast.success("Newsletter content saved");
     } catch (err: any) {
       console.error("Failed to save newsletter settings", err);
@@ -123,11 +149,38 @@ export default function NewsletterAdminPage() {
     }
   };
 
+  const handleExportSubscribers = async () => {
+    try {
+      setExportingSubs(true);
+      await downloadFile(
+        apiList.newsletter.exportSubscribers,
+        {},
+        { fallbackFilename: "newsletter-subscribers.csv" }
+      );
+      toast.success("Subscriber export downloaded");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to export subscribers");
+    } finally {
+      setExportingSubs(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-8">
       <PageHeader
         title="Newsletter"
         description="Manage the newsletter section content and view subscribers collected from the website."
+        actions={
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportSubscribers}
+            disabled={loadingSubs || exportingSubs}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            {exportingSubs ? "Exporting..." : "Export to Excel"}
+          </Button>
+        }
       />
 
       {/* Newsletter Content */}
@@ -272,6 +325,16 @@ export default function NewsletterAdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-4">
+                <PaginationControls
+                  page={page}
+                  totalPages={totalPages}
+                  totalItems={totalSubs ?? undefined}
+                  currentCount={subscribers.length}
+                  itemLabel="subscribers"
+                  onPageChange={(nextPage) => void loadSubscribers(nextPage)}
+                />
               </div>
             </>
           )}

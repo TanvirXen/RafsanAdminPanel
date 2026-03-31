@@ -128,15 +128,15 @@ export default function AdminLayout({
   }
 
   return (
-    <div className='flex h-screen'>
+    <div className='flex min-h-screen bg-background text-foreground lg:h-screen'>
       {/* Desktop Sidebar */}
-      <aside className='hidden w-64 border-r bg-background lg:block'>
+      <aside className='hidden h-screen w-64 shrink-0 border-r bg-background lg:block'>
         <Sidebar onLogout={logout} currentPath={pathname} userRole={user?.role} />
       </aside>
 
       {/* Mobile Header + Drawer */}
-      <div className='flex flex-1 flex-col'>
-        <header className='flex h-14 items-center justify-between gap-4 border-b bg-background px-4 lg:hidden'>
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <header className='sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b bg-background/95 px-4 backdrop-blur lg:hidden'>
           <div className='flex items-center gap-2'>
             <Sheet>
               <SheetTrigger asChild>
@@ -172,7 +172,9 @@ export default function AdminLayout({
         </header>
 
         {/* Main Content */}
-        <main className='flex-1 overflow-auto bg-muted/10'>{children}</main>
+        <main className='min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/10'>
+          {children}
+        </main>
       </div>
     </div>
   );

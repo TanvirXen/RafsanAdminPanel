@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import apiList from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { broadcastAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,33 @@ type BannerForm = {
   alt: string;
 };
 
+type SettingsDto = {
+  heroSection?: {
+    title?: string;
+    subtitle?: string;
+    description?: string;
+    image?: string;
+  };
+  aboutSection?: {
+    title?: string;
+    description?: string;
+    image?: string;
+  };
+};
+
+type HeroSectionForm = {
+  title: string;
+  subtitle: string;
+  description: string;
+  image: string;
+};
+
+type StoryTeaserForm = {
+  title: string;
+  description: string;
+  image: string;
+};
+
 const EMPTY_FORM: BannerForm = {
   title: "",
   subtitle: "",
@@ -61,11 +89,31 @@ const EMPTY_FORM: BannerForm = {
   alt: "",
 };
 
+const EMPTY_HERO_SECTION: HeroSectionForm = {
+  title: "",
+  subtitle: "",
+  description: "",
+  image: "",
+};
+
+const EMPTY_STORY_TEASER: StoryTeaserForm = {
+  title: "",
+  description: "",
+  image: "",
+};
+
 export default function BannerSettingsPage() {
   const [activeType, setActiveType] = useState<BannerType>("about");
   const [form, setForm] = useState<BannerForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [heroSection, setHeroSection] =
+    useState<HeroSectionForm>(EMPTY_HERO_SECTION);
+  const [storyTeaser, setStoryTeaser] =
+    useState<StoryTeaserForm>(EMPTY_STORY_TEASER);
+  const [loadingPageSections, setLoadingPageSections] = useState(false);
+  const [savingHeroSection, setSavingHeroSection] = useState(false);
+  const [savingStoryTeaser, setSavingStoryTeaser] = useState(false);
 
   const isAbout = activeType === "about";
   const isGallery = activeType === "gallery";
@@ -121,6 +169,34 @@ export default function BannerSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeType]);
 
+  const loadPageSections = async () => {
+    setLoadingPageSections(true);
+    try {
+      const response = await apiFetch<{ setting?: SettingsDto; data?: SettingsDto }>(
+        apiList.settings.get
+      );
+      const settings = response.setting || response.data || {};
+
+      setHeroSection({
+        ...EMPTY_HERO_SECTION,
+        ...(settings.heroSection || {}),
+      });
+      setStoryTeaser({
+        ...EMPTY_STORY_TEASER,
+        ...(settings.aboutSection || {}),
+      });
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to load homepage sections");
+    } finally {
+      setLoadingPageSections(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPageSections();
+  }, []);
+
   // -------- save banner --------
   const handleSave = async () => {
     setSaving(true);
@@ -146,6 +222,7 @@ export default function BannerSettingsPage() {
         }
       );
 
+      broadcastAdminSync(["banners", "settings"]);
       toast.success("Banner saved successfully");
     } catch (e: any) {
       console.error(e);
@@ -163,11 +240,59 @@ export default function BannerSettingsPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const updatePageSections = async (payload: SettingsDto) => {
+    const response = await apiFetch<{ setting?: SettingsDto; data?: SettingsDto }>(
+      apiList.settings.update,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+    const settings = response.setting || response.data || {};
+
+    setHeroSection((prev) => ({
+      ...prev,
+      ...(settings.heroSection || {}),
+    }));
+    setStoryTeaser((prev) => ({
+      ...prev,
+      ...(settings.aboutSection || {}),
+    }));
+
+    broadcastAdminSync(["settings", "banners"]);
+  };
+
+  const handleSaveHeroSection = async () => {
+    setSavingHeroSection(true);
+    try {
+      await updatePageSections({ heroSection });
+      toast.success("Homepage hero section saved");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to save homepage hero section");
+    } finally {
+      setSavingHeroSection(false);
+    }
+  };
+
+  const handleSaveStoryTeaser = async () => {
+    setSavingStoryTeaser(true);
+    try {
+      await updatePageSections({ aboutSection: storyTeaser });
+      toast.success("Story teaser section saved");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to save story teaser section");
+    } finally {
+      setSavingStoryTeaser(false);
+    }
+  };
+
   return (
     <div className='p-6 flex flex-col gap-6'>
       <PageHeader
         title='Banner Settings'
-        description='Manage About and Gallery hero banners'
+        description='Manage About, Gallery, homepage hero, and story teaser sections'
       />
 
       {/* toggle */}
@@ -334,6 +459,167 @@ export default function BannerSettingsPage() {
             >
               <Save className='h-4 w-4' />
               {saving ? "Saving…" : "Save Banner"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Homepage Hero Section</CardTitle>
+          <CardDescription>
+            Controls the homepage hero content using the same layout style as the banner editor.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className='space-y-6'>
+          {loadingPageSections && (
+            <p className='text-sm text-muted-foreground'>Loadingâ€¦</p>
+          )}
+
+          <ImageUpload
+            key={heroSection.image || "homepage-hero-default"}
+            label='Hero Image'
+            value={heroSection.image}
+            onChange={(value) =>
+              setHeroSection((prev) => ({ ...prev, image: value || "" }))
+            }
+            placeholder='Upload or paste hero image URL'
+          />
+
+          <Separator />
+
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='homepage-hero-title'>Hero Title</Label>
+              <Input
+                id='homepage-hero-title'
+                value={heroSection.title}
+                onChange={(e) =>
+                  setHeroSection((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+                placeholder='Enter hero title'
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='homepage-hero-subtitle'>Hero Subtitle</Label>
+              <Input
+                id='homepage-hero-subtitle'
+                value={heroSection.subtitle}
+                onChange={(e) =>
+                  setHeroSection((prev) => ({
+                    ...prev,
+                    subtitle: e.target.value,
+                  }))
+                }
+                placeholder='Enter hero subtitle'
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='homepage-hero-description'>Hero Description</Label>
+              <Textarea
+                id='homepage-hero-description'
+                rows={4}
+                value={heroSection.description}
+                onChange={(e) =>
+                  setHeroSection((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder='Enter hero description'
+              />
+            </div>
+          </div>
+
+          <div className='flex justify-end pt-4'>
+            <Button
+              type='button'
+              onClick={handleSaveHeroSection}
+              disabled={savingHeroSection}
+              className='gap-2'
+            >
+              <Save className='h-4 w-4' />
+              {savingHeroSection ? "Savingâ€¦" : "Save Hero Section"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Story Teaser Section</CardTitle>
+          <CardDescription>
+            Controls the homepage story teaser section using the same layout style as the banner editor.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className='space-y-6'>
+          {loadingPageSections && (
+            <p className='text-sm text-muted-foreground'>Loadingâ€¦</p>
+          )}
+
+          <ImageUpload
+            key={storyTeaser.image || "story-teaser-default"}
+            label='Story Teaser Image'
+            value={storyTeaser.image}
+            onChange={(value) =>
+              setStoryTeaser((prev) => ({ ...prev, image: value || "" }))
+            }
+            placeholder='Upload or paste story teaser image URL'
+          />
+
+          <Separator />
+
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='story-teaser-title'>Story Teaser Title</Label>
+              <Input
+                id='story-teaser-title'
+                value={storyTeaser.title}
+                onChange={(e) =>
+                  setStoryTeaser((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+                placeholder='Enter story teaser title'
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='story-teaser-description'>
+                Story Teaser Description
+              </Label>
+              <Textarea
+                id='story-teaser-description'
+                rows={4}
+                value={storyTeaser.description}
+                onChange={(e) =>
+                  setStoryTeaser((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder='Enter story teaser description'
+              />
+            </div>
+          </div>
+
+          <div className='flex justify-end pt-4'>
+            <Button
+              type='button'
+              onClick={handleSaveStoryTeaser}
+              disabled={savingStoryTeaser}
+              className='gap-2'
+            >
+              <Save className='h-4 w-4' />
+              {savingStoryTeaser ? "Savingâ€¦" : "Save Story Teaser"}
             </Button>
           </div>
         </CardContent>

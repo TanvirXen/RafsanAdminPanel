@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload } from "@/components/admin/image-upload";
 
 export interface TimelineFormData {
-  // title: string;
   date: string;
   imageLink: string;
   description: string;
@@ -25,27 +24,29 @@ interface TimelineFormProps {
 }
 
 const SLOT_OPTIONS = [
-  { value: "", label: "— Not mapped / generic —" },
-  { value: "journeyHero", label: "Journey • Hero card" },
-  { value: "journey1Left", label: "Journey 1 • Left" },
-  { value: "journey1Right", label: "Journey 1 • Right" },
-  { value: "journey2Left", label: "Journey 2 • Left" },
-  { value: "journey2Right", label: "Journey 2 • Right" },
-  { value: "journey3Left", label: "Journey 3 • Left" },
-  { value: "journey3TopRight", label: "Journey 3 • Top Right" },
-  { value: "journey3BottomRight", label: "Journey 3 • Bottom Right" },
-  { value: "setbackMainLeft", label: "Setback • Main Left" },
-  { value: "setbackMainRight", label: "Setback • Main Right" },
-  { value: "setbackMosaicLeft", label: "Setback Mosaic • Left" },
-  { value: "setbackMosaicTopRight", label: "Setback Mosaic • Top Right" },
-  { value: "setbackMosaicBottomRight", label: "Setback Mosaic • Bottom Right" },
+  { value: "", label: "- Not mapped / generic -" },
+  { value: "journeyHero", label: "Journey - Hero card" },
+  { value: "journey1Left", label: "Journey 1 - Left" },
+  { value: "journey1Right", label: "Journey 1 - Right" },
+  { value: "journey2Left", label: "Journey 2 - Left" },
+  { value: "journey2Right", label: "Journey 2 - Right" },
+  { value: "journey3Left", label: "Journey 3 - Left" },
+  { value: "journey3TopRight", label: "Journey 3 - Top Right" },
+  { value: "journey3BottomRight", label: "Journey 3 - Bottom Right" },
+  { value: "setbackMainLeft", label: "Setback - Main Left" },
+  { value: "setbackMainRight", label: "Setback - Main Right" },
+  { value: "setbackMosaicLeft", label: "Setback Mosaic - Left" },
+  { value: "setbackMosaicTopRight", label: "Setback Mosaic - Top Right" },
+  { value: "setbackMosaicBottomRight", label: "Setback Mosaic - Bottom Right" },
 ];
 
 function normalizeDateForInput(raw?: string): string {
   if (!raw) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
   const d = new Date(raw);
-  if (isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return "";
+
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -58,25 +59,24 @@ export function TimelineForm({
   onCancel,
 }: TimelineFormProps) {
   const [formData, setFormData] = useState<TimelineFormData>({
-    // title: initialData?.title || "",
     date: normalizeDateForInput(initialData?.date),
     imageLink: initialData?.imageLink || "",
     description: initialData?.description || "",
     cardUrl: initialData?.cardUrl || "",
     slotKey: initialData?.slotKey || "",
-    section: (initialData?.section as any) || "",
+    section: (initialData?.section as TimelineFormData["section"]) || "",
   });
 
   useEffect(() => {
     if (!initialData) return;
+
     setFormData({
-      // title: initialData.title || "",
       date: normalizeDateForInput(initialData.date),
       imageLink: initialData.imageLink || "",
       description: initialData.description || "",
       cardUrl: initialData.cardUrl || "",
       slotKey: initialData.slotKey || "",
-      section: (initialData.section as any) || "",
+      section: (initialData.section as TimelineFormData["section"]) || "",
     });
   }, [initialData]);
 
@@ -87,19 +87,6 @@ export function TimelineForm({
 
   return (
     <form onSubmit={handleSubmit} className='space-y-6'>
-      {/* Title */}
-      {/* <div className='space-y-2'>
-        <Label htmlFor='title'>Title</Label>
-        <Input
-          id='title'
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          placeholder='e.g., Company Founded'
-          required
-        />
-      </div> */}
-
-      {/* Date */}
       <div className='space-y-2'>
         <Label htmlFor='date'>Date</Label>
         <Input
@@ -111,7 +98,6 @@ export function TimelineForm({
         />
       </div>
 
-      {/* Image */}
       <ImageUpload
         label='Timeline Image'
         value={formData.imageLink}
@@ -120,7 +106,6 @@ export function TimelineForm({
         required
       />
 
-      {/* Description */}
       <div className='space-y-2'>
         <Label htmlFor='description'>Description</Label>
         <Textarea
@@ -134,7 +119,6 @@ export function TimelineForm({
         />
       </div>
 
-      {/* Card URL */}
       <div className='space-y-2'>
         <Label htmlFor='cardUrl'>Card URL (Optional)</Label>
         <Input
@@ -147,7 +131,6 @@ export function TimelineForm({
         />
       </div>
 
-      {/* Section */}
       <div className='space-y-2'>
         <Label htmlFor='section'>Section (optional)</Label>
         <select
@@ -161,7 +144,7 @@ export function TimelineForm({
             })
           }
         >
-          <option value=''>— Not set —</option>
+          <option value=''>- Not set -</option>
           <option value='journey'>Journey</option>
           <option value='setback'>Setback</option>
         </select>
@@ -171,7 +154,6 @@ export function TimelineForm({
         </p>
       </div>
 
-      {/* Slot Key */}
       <div className='space-y-2'>
         <Label htmlFor='slotKey'>Front-end Slot (optional)</Label>
         <select
@@ -189,12 +171,11 @@ export function TimelineForm({
           ))}
         </select>
         <p className='mt-1 text-xs text-muted-foreground'>
-          Choose where this card appears in About Page. Leave unselected for
+          Choose where this card appears in About page. Leave it unselected for
           generic timeline items.
         </p>
       </div>
 
-      {/* Actions */}
       <div className='flex justify-end gap-3'>
         <Button type='button' variant='outline' onClick={onCancel}>
           Cancel

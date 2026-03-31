@@ -66,6 +66,7 @@ const apiList = {
 
   registrations: {
     list: path("registrations"),
+    export: path("registrations", "export"),
     create: path("registrations"),
     get: (id: string) => path("registrations", id),
     update: (id: string) => path("registrations", id),
@@ -74,6 +75,7 @@ const apiList = {
 
   payments: {
     list: path("payments"),
+    export: path("payments", "export"),
     create: path("payments"),
     get: (id: string) => path("payments", id),
     update: (id: string) => path("payments", id),
@@ -95,6 +97,7 @@ const apiList = {
 
     // GET /api/newsletter/subscribers
     listSubscribers: path("newsletter", "subscribers"),
+    exportSubscribers: path("newsletter", "subscribers", "export"),
   },
 
   notableEvents: {
@@ -186,6 +189,19 @@ const apiList = {
     create: path("contact"),
     list: (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
       const url = new URL(path("contact"), API_BASE);
+
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            url.searchParams.set(key, String(value));
+          }
+        });
+      }
+
+      return url.toString();
+    },
+    export: (params?: { status?: string; search?: string }) => {
+      const url = new URL(path("contact", "export"), API_BASE);
 
       if (params) {
         Object.entries(params).forEach(([key, value]) => {

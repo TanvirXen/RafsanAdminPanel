@@ -3,15 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
+import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
-import { DollarSign, Calendar, CreditCard, User } from "lucide-react";
+import {
+  DollarSign,
+  Calendar,
+  CreditCard,
+  User,
+  FileSpreadsheet,
+} from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
+import { downloadFile } from "@/lib/api-fetch";
 
 type Payment = {
   _id: string;
@@ -34,6 +44,7 @@ export default function PaymentsPage() {
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // filters
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -43,6 +54,7 @@ export default function PaymentsPage() {
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(50);
   const [total, setTotal] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
 
   const load = async (opts?: { page?: number }) => {
     try {
@@ -54,8 +66,11 @@ export default function PaymentsPage() {
         limit,
       });
       const j = await apiFetch<ApiListResponse>(url);
+      const pagination = resolvePagination(j, limit);
       setPayments(j.payments || []);
-      setTotal(j.pagination?.total || j.payments?.length || 0);
+      setTotal(pagination.total);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load payments");
     } finally {
@@ -68,6 +83,11 @@ export default function PaymentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]); // initial after auth is known
 
+  useAdminSync(["payments", "registrations", "events"], () => {
+    if (authLoading) return;
+    void load();
+  });
+
   const applyFilters = () => {
     setPage(1);
     load({ page: 1 });
@@ -77,7 +97,74 @@ export default function PaymentsPage() {
     setDateFrom("");
     setDateTo("");
     setPage(1);
-    load({ page: 1 });
+    setTimeout(() => {
+      void load({ page: 1 });
+    }, 0);
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      await downloadFile(
+        withQuery(apiList.payments.export, {
+          from: dateFrom || undefined,
+          to: dateTo || undefined,
+        }),
+        {},
+        { fallbackFilename: "payments.csv" }
+      );
+      toast.success("Payments export downloaded");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to export payments");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDelete = async (payment: Payment) => {
+    const confirmed = confirm(`Delete payment "${payment._id}"?`);
+    if (!confirmed) return;
+
+    try {
+      await apiFetch(apiList.payments.delete(payment._id), {
+        method: "DELETE",
+      });
+      await load();
+      broadcastAdminSync("payments");
+      toast.success("Payment deleted");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete payment");
+    }
+  };
+
+  const handleBulkDelete = async (selectedPayments: Payment[]) => {
+    const confirmed = confirm(
+      `Delete ${selectedPayments.length} selected payment${
+        selectedPayments.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!confirmed) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedPayments,
+      (payment) =>
+        apiFetch(apiList.payments.delete(payment._id), {
+          method: "DELETE",
+        })
+    );
+
+    await load();
+    broadcastAdminSync("payments");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} payment${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} payment(s)`);
+    }
   };
 
   const totalRevenue = useMemo(
@@ -152,6 +239,17 @@ export default function PaymentsPage() {
       <PageHeader
         title='Payments'
         description='Track and manage payment transactions'
+        actions={
+          <Button
+            variant='outline'
+            className='gap-2'
+            onClick={handleExport}
+            disabled={isLoading || isExporting}
+          >
+            <FileSpreadsheet className='h-4 w-4' />
+            {isExporting ? "Exporting..." : "Export to Excel"}
+          </Button>
+        }
       />
 
       {/* Filters */}
@@ -211,7 +309,7 @@ export default function PaymentsPage() {
             </div>
             <CreditCard className='h-4 w-4 text-muted-foreground' />
           </div>
-          <div className='mt-2 text-3xl font-semibold'>{payments.length}</div>
+          <div className='mt-2 text-3xl font-semibold'>{total}</div>
         </div>
 
         <div className='rounded-lg border bg-card p-6'>
@@ -229,8 +327,15 @@ export default function PaymentsPage() {
       <DataTable
         data={payments}
         columns={columns}
+        onDelete={handleDelete}
+        onBulkDelete={handleBulkDelete}
         searchPlaceholder='Search payments...'
-        // if your DataTable supports pagination controls, wire them here
+        page={page}
+        totalPages={totalPages}
+        totalItems={total}
+        paginationLabel='payments'
+        onPageChange={(nextPage) => void load({ page: nextPage })}
+        isPageLoading={isLoading}
       />
     </div>
   );

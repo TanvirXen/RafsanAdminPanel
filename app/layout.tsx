@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   title: "Admin Panel",
   description: "Admin Panel for Rafsan's Portfolio Website",
   generator: "v0.app",
+  appleWebApp: {
+    title: "Rafsan Sabab",
+  },
 };
 
 export default function RootLayout({
@@ -17,7 +20,6 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang='en'>
-      <meta name='apple-mobile-web-app-title' content='Rafsan Sabab' />
       <body
         className={`font-sans antialiased ${GeistSans.variable} ${GeistMono.variable}`}
       >

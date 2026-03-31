@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import apiList from "@/apiList";
+import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
+import { resolvePagination } from "@/lib/pagination";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { PaginationControls } from "@/components/admin/pagination-controls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,11 +44,26 @@ interface Brand {
   externalLink: string;
 }
 
+type BrandsResponse = {
+  brands: Brand[];
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+};
+
+const PAGE_SIZE = 12;
+
 export default function BrandsPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("grid");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalBrands, setTotalBrands] = useState(0);
 
   // confirm dialog state (no window.alert)
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -67,17 +86,32 @@ export default function BrandsPage() {
     confirmResolveRef.current = undefined;
   };
 
+  const loadBrands = async (pageToLoad = page) => {
+    try {
+      const j = await apiFetch<BrandsResponse>(
+        withQuery(apiList.brands.list, {
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+        })
+      );
+      const pagination = resolvePagination(j, PAGE_SIZE);
+      setBrands(j.brands || []);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+      setTotalBrands(pagination.total);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load brands");
+    }
+  };
+
   /* load */
   useEffect(() => {
-    (async () => {
-      try {
-        const j = await apiFetch<{ brands: Brand[] }>(apiList.brands.list);
-        setBrands(j.brands || []);
-      } catch (e: any) {
-        toast.error(e?.message || "Failed to load brands");
-      }
-    })();
+    void loadBrands();
   }, []);
+
+  useAdminSync("brands", () => {
+    void loadBrands(page);
+  });
 
   /* CRUD */
   const handleAdd = () => {
@@ -99,10 +133,39 @@ export default function BrandsPage() {
 
     try {
       await apiFetch(apiList.brands.delete(brand._id), { method: "DELETE" });
-      setBrands((prev) => prev.filter((b) => b._id !== brand._id));
+      await loadBrands();
+      broadcastAdminSync("brands");
       toast.success("Brand deleted");
     } catch (e: any) {
       toast.error(e?.message || "Failed to delete brand");
+    }
+  };
+
+  const handleBulkDelete = async (selectedBrands: Brand[]) => {
+    const ok = await askConfirm(
+      "Delete Brands",
+      `Are you sure you want to delete ${selectedBrands.length} selected brand${
+        selectedBrands.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedBrands,
+      (brand) => apiFetch(apiList.brands.delete(brand._id), { method: "DELETE" })
+    );
+
+    await loadBrands();
+    broadcastAdminSync("brands");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} brand${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} brand(s)`);
     }
   };
 
@@ -110,23 +173,21 @@ export default function BrandsPage() {
     try {
       if (editingBrand) {
         // update (PUT)
-        const j = await apiFetch<{ brand: Brand }>(
-          apiList.brands.update(editingBrand._id),
-          { method: "PUT", body: JSON.stringify(data) }
-        );
-        setBrands((prev) =>
-          prev.map((b) => (b._id === editingBrand._id ? j.brand : b))
-        );
+        await apiFetch<{ brand: Brand }>(apiList.brands.update(editingBrand._id), {
+          method: "PUT",
+          body: JSON.stringify(data),
+        });
         toast.success("Brand updated");
       } else {
         // create
-        const j = await apiFetch<{ brand: Brand }>(apiList.brands.create, {
+        await apiFetch<{ brand: Brand }>(apiList.brands.create, {
           method: "POST",
           body: JSON.stringify(data),
         });
-        setBrands((prev) => [j.brand, ...prev]);
         toast.success("Brand created");
       }
+      await loadBrands();
+      broadcastAdminSync("brands");
       setIsDialogOpen(false);
     } catch (e: any) {
       toast.error(
@@ -204,7 +265,13 @@ export default function BrandsPage() {
           onAdd={handleAdd}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
           searchPlaceholder='Search brands...'
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalBrands}
+          paginationLabel='brands'
+          onPageChange={(nextPage) => void loadBrands(nextPage)}
         />
       ) : (
         <div className='space-y-4'>
@@ -259,6 +326,14 @@ export default function BrandsPage() {
               </Card>
             ))}
           </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalBrands}
+            currentCount={brands.length}
+            itemLabel='brands'
+            onPageChange={(nextPage) => void loadBrands(nextPage)}
+          />
         </div>
       )}
 

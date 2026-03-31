@@ -3,6 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdminSync } from "@/hooks/use-admin-sync";
 import {
   Card,
   CardContent,
@@ -56,18 +57,24 @@ export default function AdminDashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
 
+  const loadSummary = async () => {
+    try {
+      const j = await apiFetch<DashboardSummary>(apiList.dashboard.summary);
+      setSummary(j);
+    } catch {
+      // non-fatal; keep placeholders
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const j = await apiFetch<DashboardSummary>(apiList.dashboard.summary);
-        setSummary(j);
-      } catch {
-        // non-fatal; keep placeholders
-      } finally {
-        setLoadingSummary(false);
-      }
-    })();
+    void loadSummary();
   }, []);
+
+  useAdminSync("*", () => {
+    void loadSummary();
+  });
 
   const stats = useMemo(() => {
     const t = summary?.totals;

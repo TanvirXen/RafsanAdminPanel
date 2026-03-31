@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import apiList from "@/apiList";
+import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
+import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -80,14 +83,39 @@ interface Reel {
   showTitle?: string; // derived
 }
 
+type PaginatedResponse<T> = {
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+} & T;
+
+const PAGE_SIZE = 12;
+
 export default function ShowsPage() {
   // Enforce auth + redirect to /login if unauthenticated
   const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
 
   const [shows, setShows] = useState<Show[]>([]);
+  const [allShows, setAllShows] = useState<Show[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [allSeasons, setAllSeasons] = useState<Season[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [reels, setReels] = useState<Reel[]>([]);
+  const [showsPage, setShowsPage] = useState(1);
+  const [showsTotalPages, setShowsTotalPages] = useState(1);
+  const [showsTotalItems, setShowsTotalItems] = useState(0);
+  const [seasonsPage, setSeasonsPage] = useState(1);
+  const [seasonsTotalPages, setSeasonsTotalPages] = useState(1);
+  const [seasonsTotalItems, setSeasonsTotalItems] = useState(0);
+  const [episodesPage, setEpisodesPage] = useState(1);
+  const [episodesTotalPages, setEpisodesTotalPages] = useState(1);
+  const [episodesTotalItems, setEpisodesTotalItems] = useState(0);
+  const [reelsPage, setReelsPage] = useState(1);
+  const [reelsTotalPages, setReelsTotalPages] = useState(1);
+  const [reelsTotalItems, setReelsTotalItems] = useState(0);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<
@@ -129,80 +157,115 @@ export default function ShowsPage() {
 
   const showMap = useMemo(() => {
     const m = new Map<string, Show>();
-    shows.forEach((s) => m.set(s._id, s));
+    allShows.forEach((s) => m.set(s._id, s));
     return m;
-  }, [shows]);
+  }, [allShows]);
 
   const seasonMap = useMemo(() => {
     const m = new Map<string, Season>();
-    seasons.forEach((s) => m.set(s._id, s));
+    allSeasons.forEach((s) => m.set(s._id, s));
     return m;
-  }, [seasons]);
+  }, [allSeasons]);
+
+  const loadShowsData = async (
+    overrides?: Partial<{
+      showsPage: number;
+      seasonsPage: number;
+      episodesPage: number;
+      reelsPage: number;
+      seasonFilter: string;
+      episodeFilter: string;
+      reelFilter: string;
+    }>
+  ) => {
+    try {
+      const nextShowsPage = overrides?.showsPage ?? showsPage;
+      const nextSeasonsPage = overrides?.seasonsPage ?? seasonsPage;
+      const nextEpisodesPage = overrides?.episodesPage ?? episodesPage;
+      const nextReelsPage = overrides?.reelsPage ?? reelsPage;
+      const nextSeasonFilter = overrides?.seasonFilter ?? seasonFilter;
+      const nextEpisodeFilter = overrides?.episodeFilter ?? episodeFilter;
+      const nextReelFilter = overrides?.reelFilter ?? reelFilter;
+
+      const [
+        allShowsResponse,
+        allSeasonsResponse,
+        showsResponse,
+        seasonsResponse,
+        episodesResponse,
+        reelsResponse,
+      ] = await Promise.all([
+        apiFetch<{ shows: Show[] }>(apiList.shows.list),
+        apiFetch<{ seasons: Season[] }>(apiList.shows.seasons),
+        apiFetch<PaginatedResponse<{ shows: Show[] }>>(
+          withQuery(apiList.shows.list, {
+            page: nextShowsPage,
+            limit: PAGE_SIZE,
+          })
+        ),
+        apiFetch<PaginatedResponse<{ seasons: Season[] }>>(
+          withQuery(apiList.shows.seasons, {
+            showId: nextSeasonFilter === "all" ? undefined : nextSeasonFilter,
+            page: nextSeasonsPage,
+            limit: PAGE_SIZE,
+          })
+        ),
+        apiFetch<PaginatedResponse<{ episodes: Episode[] }>>(
+          withQuery(apiList.shows.episodes, {
+            showId: nextEpisodeFilter === "all" ? undefined : nextEpisodeFilter,
+            page: nextEpisodesPage,
+            limit: PAGE_SIZE,
+          })
+        ),
+        apiFetch<PaginatedResponse<{ reels: Reel[] }>>(
+          withQuery(apiList.shows.reels, {
+            showId: nextReelFilter === "all" ? undefined : nextReelFilter,
+            page: nextReelsPage,
+            limit: PAGE_SIZE,
+          })
+        ),
+      ]);
+
+      const showsPagination = resolvePagination(showsResponse, PAGE_SIZE);
+      const seasonsPagination = resolvePagination(seasonsResponse, PAGE_SIZE);
+      const episodesPagination = resolvePagination(episodesResponse, PAGE_SIZE);
+      const reelsPagination = resolvePagination(reelsResponse, PAGE_SIZE);
+
+      setAllShows(allShowsResponse.shows || []);
+      setAllSeasons(allSeasonsResponse.seasons || []);
+      setShows(showsResponse.shows || []);
+      setSeasons(seasonsResponse.seasons || []);
+      setEpisodes(episodesResponse.episodes || []);
+      setReels(reelsResponse.reels || []);
+      setShowsPage(showsPagination.page);
+      setShowsTotalPages(showsPagination.pages);
+      setShowsTotalItems(showsPagination.total);
+      setSeasonsPage(seasonsPagination.page);
+      setSeasonsTotalPages(seasonsPagination.pages);
+      setSeasonsTotalItems(seasonsPagination.total);
+      setEpisodesPage(episodesPagination.page);
+      setEpisodesTotalPages(episodesPagination.pages);
+      setEpisodesTotalItems(episodesPagination.total);
+      setReelsPage(reelsPagination.page);
+      setReelsTotalPages(reelsPagination.pages);
+      setReelsTotalItems(reelsPagination.total);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to load data");
+    }
+  };
 
   /* ------------------------------ load data ------------------------------ */
   useEffect(() => {
     // Wait for auth check to settle first to avoid unnecessary requests
     if (authLoading) return;
 
-    (async () => {
-      try {
-        // shows
-        const sJson = await apiFetch<{ shows: Show[] }>(apiList.shows.list);
-        const showsArr = sJson.shows || [];
-        setShows(showsArr);
-
-        // seasons
-        const seasonJson = await apiFetch<{ seasons: Season[] }>(
-          apiList.shows.seasons
-        );
-        const seasonsWithTitle: Season[] = (seasonJson.seasons || []).map(
-          (se: Season) => ({
-            ...se,
-            showTitle: showsArr.find((x) => x._id === se.showId)?.title,
-          })
-        );
-        setSeasons(seasonsWithTitle);
-
-        // episodes
-        const epJson = await apiFetch<{ episodes: Episode[] }>(
-          apiList.shows.episodes
-        );
-        const episodesWithTitles: Episode[] = (epJson.episodes || []).map(
-          (e: Episode) => ({
-            ...e,
-            showTitle: showsArr.find((x) => x._id === e.showId)?.title,
-            seasonTitle: seasonsWithTitle.find((x) => x._id === e.seasonId)
-              ?.title,
-          })
-        );
-        setEpisodes(episodesWithTitles);
-
-        // reels
-        const rJson = await apiFetch<{ reels: Reel[] }>(apiList.shows.reels);
-        const reelsWithTitle: Reel[] = (rJson.reels || []).map((r: Reel) => ({
-          ...r,
-          showTitle: showsArr.find((x) => x._id === r.showId)?.title,
-        }));
-        setReels(reelsWithTitle);
-      } catch (err: any) {
-        toast.error(err?.message || "Failed to load data");
-      }
-    })();
+    void loadShowsData();
   }, [authLoading]);
 
-  /* ------------------------------ filters ------------------------------ */
-  const filteredSeasons =
-    seasonFilter === "all"
-      ? seasons
-      : seasons.filter((s) => s.showId === seasonFilter);
-
-  const filteredEpisodes =
-    episodeFilter === "all"
-      ? episodes
-      : episodes.filter((e) => e.showId === episodeFilter);
-
-  const filteredReels =
-    reelFilter === "all" ? reels : reels.filter((r) => r.showId === reelFilter);
+  useAdminSync("shows", () => {
+    if (authLoading) return;
+    void loadShowsData();
+  });
 
   /* ------------------------------ shows CRUD ------------------------------ */
   const handleAdd = () => {
@@ -234,9 +297,39 @@ export default function ShowsPage() {
       setSeasons((prev) => prev.filter((s) => s.showId !== show._id));
       setEpisodes((prev) => prev.filter((e) => e.showId !== show._id));
       setReels((prev) => prev.filter((r) => r.showId !== show._id));
+      await loadShowsData();
+      broadcastAdminSync("shows");
       toast.success("Show deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete show");
+    }
+  };
+
+  const handleBulkDeleteShows = async (selectedShows: Show[]) => {
+    const ok = await askConfirm(
+      "Delete Shows",
+      `Are you sure you want to delete ${selectedShows.length} selected show${
+        selectedShows.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedShows,
+      (show) => apiFetch(apiList.shows.delete(show._id), { method: "DELETE" })
+    );
+
+    await loadShowsData();
+    broadcastAdminSync("shows");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} show${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} show(s)`);
     }
   };
 
@@ -262,6 +355,8 @@ export default function ShowsPage() {
         setShows((prev) => [j.show, ...prev]);
         toast.success("Show created");
       }
+      await loadShowsData();
+      broadcastAdminSync("shows");
       setIsDialogOpen(false);
     } catch (err: any) {
       toast.error(
@@ -307,9 +402,42 @@ export default function ShowsPage() {
             : sh
         )
       );
+      await loadShowsData();
+      broadcastAdminSync("shows");
       toast.success("Season deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete season");
+    }
+  };
+
+  const handleBulkDeleteSeasons = async (selectedSeasons: Season[]) => {
+    const ok = await askConfirm(
+      "Delete Seasons",
+      `Are you sure you want to delete ${selectedSeasons.length} selected season${
+        selectedSeasons.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedSeasons,
+      (season) =>
+        apiFetch(apiList.shows.deleteSeason(season.showId, season._id), {
+          method: "DELETE",
+        })
+    );
+
+    await loadShowsData();
+    broadcastAdminSync("shows");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} season${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} season(s)`);
     }
   };
 
@@ -356,6 +484,8 @@ export default function ShowsPage() {
         );
         toast.success("Season created");
       }
+      await loadShowsData();
+      broadcastAdminSync("shows");
       setIsDialogOpen(false);
     } catch (err: any) {
       toast.error(
@@ -397,9 +527,47 @@ export default function ShowsPage() {
         { method: "DELETE" }
       );
       setEpisodes((prev) => prev.filter((e) => e._id !== episode._id));
+      await loadShowsData();
+      broadcastAdminSync("shows");
       toast.success("Episode deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete episode");
+    }
+  };
+
+  const handleBulkDeleteEpisodes = async (selectedEpisodes: Episode[]) => {
+    const ok = await askConfirm(
+      "Delete Episodes",
+      `Are you sure you want to delete ${selectedEpisodes.length} selected episode${
+        selectedEpisodes.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedEpisodes,
+      (episode) =>
+        apiFetch(
+          apiList.shows.deleteEpisode(
+            episode.showId,
+            episode.seasonId,
+            episode._id
+          ),
+          { method: "DELETE" }
+        )
+    );
+
+    await loadShowsData();
+    broadcastAdminSync("shows");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} episode${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} episode(s)`);
     }
   };
 
@@ -453,6 +621,8 @@ export default function ShowsPage() {
         ]);
         toast.success("Episode created");
       }
+      await loadShowsData();
+      broadcastAdminSync("shows");
       setIsDialogOpen(false);
     } catch (err: any) {
       toast.error(
@@ -498,9 +668,42 @@ export default function ShowsPage() {
             : sh
         )
       );
+      await loadShowsData();
+      broadcastAdminSync("shows");
       toast.success("Reel deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete reel");
+    }
+  };
+
+  const handleBulkDeleteReels = async (selectedReels: Reel[]) => {
+    const ok = await askConfirm(
+      "Delete Reels",
+      `Are you sure you want to delete ${selectedReels.length} selected reel${
+        selectedReels.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedReels,
+      (reel) =>
+        apiFetch(apiList.shows.deleteReel(reel.showId, reel._id), {
+          method: "DELETE",
+        })
+    );
+
+    await loadShowsData();
+    broadcastAdminSync("shows");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} reel${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} reel(s)`);
     }
   };
 
@@ -551,6 +754,8 @@ export default function ShowsPage() {
         );
         toast.success("Reel created");
       }
+      await loadShowsData();
+      broadcastAdminSync("shows");
       setIsDialogOpen(false);
     } catch (err: any) {
       toast.error(
@@ -597,27 +802,44 @@ export default function ShowsPage() {
       key: "description",
       label: "Description",
       render: (show: Show) => (
-        <span className='line-clamp-1'>{show.description}</span>
+        <span className='block max-w-[34rem] line-clamp-2 text-muted-foreground'>
+          {show.description || "-"}
+        </span>
       ),
     },
   ];
 
   const seasonColumns = [
     { key: "title", label: "Title" },
-    { key: "showTitle", label: "Show" },
+    {
+      key: "showTitle",
+      label: "Show",
+      render: (season: Season) => showMap.get(season.showId)?.title || season.showId,
+    },
     {
       key: "description",
       label: "Description",
       render: (season: Season) => (
-        <span className='line-clamp-1'>{season.description}</span>
+        <span className='block max-w-[28rem] line-clamp-2 text-muted-foreground'>
+          {season.description || "-"}
+        </span>
       ),
     },
   ];
 
   const episodeColumns = [
     { key: "title", label: "Title" },
-    { key: "showTitle", label: "Show" },
-    { key: "seasonTitle", label: "Season" },
+    {
+      key: "showTitle",
+      label: "Show",
+      render: (episode: Episode) => showMap.get(episode.showId)?.title || episode.showId,
+    },
+    {
+      key: "seasonTitle",
+      label: "Season",
+      render: (episode: Episode) =>
+        seasonMap.get(episode.seasonId)?.title || episode.seasonId,
+    },
     {
       key: "thumbnail",
       label: "Thumbnail",
@@ -633,7 +855,11 @@ export default function ShowsPage() {
 
   const reelColumns = [
     { key: "title", label: "Title" },
-    { key: "showTitle", label: "Show" },
+    {
+      key: "showTitle",
+      label: "Show",
+      render: (reel: Reel) => showMap.get(reel.showId)?.title || reel.showId,
+    },
     {
       key: "thumbnail",
       label: "Thumbnail",
@@ -649,7 +875,9 @@ export default function ShowsPage() {
       key: "description",
       label: "Description",
       render: (reel: Reel) => (
-        <span className='line-clamp-1'>{reel.description}</span>
+        <span className='block max-w-[28rem] line-clamp-2 text-muted-foreground'>
+          {reel.description || "-"}
+        </span>
       ),
     },
   ];
@@ -670,17 +898,18 @@ export default function ShowsPage() {
   }
 
   return (
-    <div className='flex flex-col gap-6 p-6 lg:p-8'>
-      <div className='flex items-center justify-between'>
+    <div className='mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8'>
+      <div className='flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between'>
         <PageHeader
           title='Shows'
           description='Manage your shows, seasons, episodes, and reels'
         />
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-2 self-start rounded-xl border bg-background p-1 shadow-sm xl:self-center'>
           <Button
             variant='outline'
             size='icon'
             onClick={() => setViewMode("table")}
+            aria-label='Table view'
           >
             <List className='h-4 w-4' />
           </Button>
@@ -688,13 +917,14 @@ export default function ShowsPage() {
             variant='outline'
             size='icon'
             onClick={() => setViewMode("grid")}
+            aria-label='Grid view'
           >
             <Grid3x3 className='h-4 w-4' />
           </Button>
         </div>
       </div>
 
-      <Tabs defaultValue='shows' className='space-y-4'>
+      <Tabs defaultValue='shows' className='min-w-0 space-y-6'>
         <TabsList>
           <TabsTrigger value='shows'>Shows</TabsTrigger>
           <TabsTrigger value='seasons'>Seasons</TabsTrigger>
@@ -710,10 +940,16 @@ export default function ShowsPage() {
               onAdd={handleAdd}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDeleteShows}
               searchPlaceholder='Search shows...'
+              page={showsPage}
+              totalPages={showsTotalPages}
+              totalItems={showsTotalItems}
+              paginationLabel='shows'
+              onPageChange={(nextPage) => void loadShowsData({ showsPage: nextPage })}
             />
           ) : (
-            <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
+            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
               {shows.map((show) => (
                 <Card key={show._id}>
                   <CardHeader>
@@ -771,18 +1007,24 @@ export default function ShowsPage() {
         </TabsContent>
 
         <TabsContent value='seasons' className='space-y-4'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <span className='text-sm text-muted-foreground sm:shrink-0'>
                 Filter by show:
               </span>
-              <Select value={seasonFilter} onValueChange={setSeasonFilter}>
-                <SelectTrigger className='w-[200px]'>
+              <Select
+                value={seasonFilter}
+                onValueChange={(value) => {
+                  setSeasonFilter(value);
+                  void loadShowsData({ seasonsPage: 1, seasonFilter: value });
+                }}
+              >
+                <SelectTrigger className='w-full bg-background sm:w-[220px]'>
                   <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='all'>All shows</SelectItem>
-                  {shows.map((show) => (
+                  {allShows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
                     </SelectItem>
@@ -792,28 +1034,40 @@ export default function ShowsPage() {
             </div>
           </div>
           <DataTable
-            data={filteredSeasons}
+            data={seasons}
             columns={seasonColumns}
             onAdd={handleAddSeason}
             onEdit={handleEditSeason}
             onDelete={handleDeleteSeason}
+            onBulkDelete={handleBulkDeleteSeasons}
             searchPlaceholder='Search seasons...'
+            page={seasonsPage}
+            totalPages={seasonsTotalPages}
+            totalItems={seasonsTotalItems}
+            paginationLabel='seasons'
+            onPageChange={(nextPage) => void loadShowsData({ seasonsPage: nextPage })}
           />
         </TabsContent>
 
         <TabsContent value='episodes' className='space-y-4'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <span className='text-sm text-muted-foreground sm:shrink-0'>
                 Filter by show:
               </span>
-              <Select value={episodeFilter} onValueChange={setEpisodeFilter}>
-                <SelectTrigger className='w-[200px]'>
+              <Select
+                value={episodeFilter}
+                onValueChange={(value) => {
+                  setEpisodeFilter(value);
+                  void loadShowsData({ episodesPage: 1, episodeFilter: value });
+                }}
+              >
+                <SelectTrigger className='w-full bg-background sm:w-[220px]'>
                   <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='all'>All shows</SelectItem>
-                  {shows.map((show) => (
+                  {allShows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
                     </SelectItem>
@@ -823,28 +1077,40 @@ export default function ShowsPage() {
             </div>
           </div>
           <DataTable
-            data={filteredEpisodes}
+            data={episodes}
             columns={episodeColumns}
             onAdd={handleAddEpisode}
             onEdit={handleEditEpisode}
             onDelete={handleDeleteEpisode}
+            onBulkDelete={handleBulkDeleteEpisodes}
             searchPlaceholder='Search episodes...'
+            page={episodesPage}
+            totalPages={episodesTotalPages}
+            totalItems={episodesTotalItems}
+            paginationLabel='episodes'
+            onPageChange={(nextPage) => void loadShowsData({ episodesPage: nextPage })}
           />
         </TabsContent>
 
         <TabsContent value='reels' className='space-y-4'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <span className='text-sm text-muted-foreground sm:shrink-0'>
                 Filter by show:
               </span>
-              <Select value={reelFilter} onValueChange={setReelFilter}>
-                <SelectTrigger className='w-[200px]'>
+              <Select
+                value={reelFilter}
+                onValueChange={(value) => {
+                  setReelFilter(value);
+                  void loadShowsData({ reelsPage: 1, reelFilter: value });
+                }}
+              >
+                <SelectTrigger className='w-full bg-background sm:w-[220px]'>
                   <SelectValue placeholder='All shows' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='all'>All shows</SelectItem>
-                  {shows.map((show) => (
+                  {allShows.map((show) => (
                     <SelectItem key={show._id} value={show._id}>
                       {show.title}
                     </SelectItem>
@@ -854,12 +1120,18 @@ export default function ShowsPage() {
             </div>
           </div>
           <DataTable
-            data={filteredReels}
+            data={reels}
             columns={reelColumns}
             onAdd={handleAddReel}
             onEdit={handleEditReel}
             onDelete={handleDeleteReel}
+            onBulkDelete={handleBulkDeleteReels}
             searchPlaceholder='Search reels...'
+            page={reelsPage}
+            totalPages={reelsTotalPages}
+            totalItems={reelsTotalItems}
+            paginationLabel='reels'
+            onPageChange={(nextPage) => void loadShowsData({ reelsPage: nextPage })}
           />
         </TabsContent>
       </Tabs>
@@ -894,7 +1166,7 @@ export default function ShowsPage() {
             {dialogType === "season" && (
               <SeasonForm
                 initialData={editingSeason}
-                shows={shows}
+                shows={allShows}
                 onSave={handleSaveSeason}
                 onCancel={() => setIsDialogOpen(false)}
               />
@@ -903,8 +1175,8 @@ export default function ShowsPage() {
             {dialogType === "episode" && (
               <EpisodeForm
                 initialData={editingEpisode}
-                shows={shows}
-                seasons={seasons}
+                shows={allShows}
+                seasons={allSeasons}
                 onSave={handleSaveEpisode}
                 onCancel={() => setIsDialogOpen(false)}
               />
@@ -913,7 +1185,7 @@ export default function ShowsPage() {
             {dialogType === "reel" && (
               <ReelForm
                 initialData={editingReel}
-                shows={shows}
+                shows={allShows}
                 onSave={handleSaveReel}
                 onCancel={() => setIsDialogOpen(false)}
               />

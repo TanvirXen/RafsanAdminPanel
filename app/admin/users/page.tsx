@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import apiList from "@/apiList";
+import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
+import { runBulkDelete } from "@/lib/bulk-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
 import { UserForm, type UserFormShape } from "@/components/admin/forms/user-form";
@@ -44,6 +47,23 @@ type AdminUser = {
   updatedAt: string;
 };
 
+type AdminUsersResponse = {
+  users: AdminUser[];
+  summary?: {
+    total: number;
+    admins: number;
+    editors: number;
+  };
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+};
+
+const PAGE_SIZE = 20;
+
 function formatDate(value?: string) {
   if (!value) return "—";
 
@@ -59,48 +79,64 @@ export default function UsersPage() {
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [summary, setSummary] = useState({ total: 0, admins: 0, editors: 0 });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
 
-  useEffect(() => {
+  const loadUsers = async (pageToLoad = page) => {
     if (authLoading) return;
 
     if (me?.role !== "admin") {
       setLoadingUsers(false);
       setUsers([]);
+      setSummary({ total: 0, admins: 0, editors: 0 });
       return;
     }
 
-    let cancelled = false;
+    setLoadingUsers(true);
 
-    (async () => {
-      setLoadingUsers(true);
-      try {
-        const data = await apiFetch<{ users: AdminUser[] }>(apiList.adminUsers.list);
-        if (!cancelled) {
-          setUsers(data.users || []);
+    try {
+      const data = await apiFetch<AdminUsersResponse>(
+        withQuery(apiList.adminUsers.list, {
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+        })
+      );
+      const pagination = resolvePagination(data, PAGE_SIZE);
+      setUsers(data.users || []);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+      setTotalUsers(pagination.total);
+      setSummary(
+        data.summary || {
+          total: pagination.total,
+          admins: 0,
+          editors: 0,
         }
-      } catch (error: any) {
-        if (!cancelled) {
-          toast.error(error?.message || "Failed to load users");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingUsers(false);
-        }
-      }
-    })();
+      );
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to load users");
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    void loadUsers();
   }, [authLoading, me?.role]);
 
+  useAdminSync("admin-users", () => {
+    void loadUsers(page);
+  });
+
   const stats = {
-    total: users.length,
-    admins: users.filter((user) => user.role === "admin").length,
-    editors: users.filter((user) => user.role === "editor").length,
+    total: summary.total,
+    admins: summary.admins,
+    editors: summary.editors,
   };
 
   const openCreateDialog = () => {
@@ -151,6 +187,8 @@ export default function UsersPage() {
         toast.success("User created");
       }
 
+      await loadUsers();
+      broadcastAdminSync("admin-users");
       setIsDialogOpen(false);
       setEditingUser(null);
     } catch (error: any) {
@@ -168,11 +206,42 @@ export default function UsersPage() {
       await apiFetch(apiList.adminUsers.delete(deletingUser.id), {
         method: "DELETE",
       });
-      setUsers((prev) => prev.filter((user) => user.id !== deletingUser.id));
+      await loadUsers();
+      broadcastAdminSync("admin-users");
       toast.success("User deleted");
       setDeletingUser(null);
     } catch (error: any) {
       toast.error(error?.message || "Failed to delete user");
+    }
+  };
+
+  const handleBulkDelete = async (selectedUsers: AdminUser[]) => {
+    const confirmed = confirm(
+      `Delete ${selectedUsers.length} selected user${
+        selectedUsers.length === 1 ? "" : "s"
+      }? This action cannot be undone.`
+    );
+    if (!confirmed) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedUsers,
+      (selectedUser) =>
+        apiFetch(apiList.adminUsers.delete(selectedUser.id), {
+          method: "DELETE",
+        })
+    );
+
+    await loadUsers();
+    broadcastAdminSync("admin-users");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} user${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} user(s)`);
     }
   };
 
@@ -310,7 +379,15 @@ export default function UsersPage() {
         columns={columns}
         onEdit={openEditDialog}
         onDelete={(user) => setDeletingUser(user)}
+        onBulkDelete={handleBulkDelete}
+        isRowSelectable={(user) => user.id !== me?.id}
         searchPlaceholder="Search users..."
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalUsers}
+        paginationLabel="users"
+        onPageChange={(nextPage) => void loadUsers(nextPage)}
+        isPageLoading={loadingUsers}
       />
 
       <Dialog

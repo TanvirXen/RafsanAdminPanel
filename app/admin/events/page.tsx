@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import apiList from "@/apiList";
+import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
+import { runBulkDelete } from "@/lib/bulk-actions";
+import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
+import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { PaginationControls } from "@/components/admin/pagination-controls";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -47,6 +51,19 @@ interface Event {
   }>;
 }
 
+type EventsResponse = {
+  events?: Event[];
+  data?: Event[];
+  pagination?: {
+    total: number;
+    page: number;
+    pages: number;
+    limit: number;
+  };
+};
+
+const PAGE_SIZE = 12;
+
 export default function EventsPage() {
   // Enforce auth + redirect to /login if unauthenticated
   const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
@@ -55,6 +72,9 @@ export default function EventsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
 
   // brands master list
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -81,23 +101,39 @@ export default function EventsPage() {
     confirmResolveRef.current = undefined;
   };
 
+  const loadData = async (pageToLoad = page) => {
+    try {
+      const [{ events: evs = [], data: d, ...eventResponse }, { brands: brs = [] }] =
+        await Promise.all([
+          apiFetch<EventsResponse>(
+            withQuery(apiList.events.list, {
+              page: pageToLoad,
+              limit: PAGE_SIZE,
+            })
+          ),
+          apiFetch<{ brands: Brand[] }>(apiList.brands.list),
+        ]);
+      const pagination = resolvePagination(eventResponse, PAGE_SIZE);
+      setEvents(evs?.length ? evs : d || []);
+      setBrands(brs);
+      setPage(pagination.page);
+      setTotalPages(pagination.pages);
+      setTotalEvents(pagination.total);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to load events/brands");
+    }
+  };
+
   // ---------- load ----------
   useEffect(() => {
     if (authLoading) return;
-    (async () => {
-      try {
-        const [{ events: evs = [], data: d }, { brands: brs = [] }] =
-          await Promise.all([
-            apiFetch<{ events?: Event[]; data?: Event[] }>(apiList.events.list),
-            apiFetch<{ brands: Brand[] }>(apiList.brands.list),
-          ]);
-        setEvents(evs?.length ? evs : d || []);
-        setBrands(brs);
-      } catch (err: any) {
-        toast.error(err?.message || "Failed to load events/brands");
-      }
-    })();
+    void loadData();
   }, [authLoading]);
+
+  useAdminSync(["events", "brands"], () => {
+    if (authLoading) return;
+    void loadData(page);
+  });
 
   // Resolve associated brand objects for the currently edited event
   const editingEventBrands: Brand[] = useMemo(() => {
@@ -137,10 +173,39 @@ export default function EventsPage() {
     if (!ok) return;
     try {
       await apiFetch(apiList.events.delete(event._id), { method: "DELETE" });
-      setEvents((prev) => prev.filter((e) => e._id !== event._id));
+      await loadData();
+      broadcastAdminSync("events");
       toast.success("Event deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete event");
+    }
+  };
+
+  const handleBulkDelete = async (selectedEvents: Event[]) => {
+    const ok = await askConfirm(
+      "Delete Events",
+      `Are you sure you want to delete ${selectedEvents.length} selected event${
+        selectedEvents.length === 1 ? "" : "s"
+      }?`
+    );
+    if (!ok) return false;
+
+    const { successCount, failureCount, errors } = await runBulkDelete(
+      selectedEvents,
+      (event) => apiFetch(apiList.events.delete(event._id), { method: "DELETE" })
+    );
+
+    await loadData();
+    broadcastAdminSync("events");
+
+    if (successCount > 0) {
+      toast.success(
+        `${successCount} event${successCount === 1 ? "" : "s"} deleted`
+      );
+    }
+
+    if (failureCount > 0) {
+      toast.error(errors[0] || `Failed to delete ${failureCount} event(s)`);
     }
   };
 
@@ -158,27 +223,21 @@ export default function EventsPage() {
 
     try {
       if (editingEvent) {
-        const j = await apiFetch<{ event: Event }>(
-          apiList.events.update(editingEvent._id),
-          {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          }
-        );
-        setEvents((prev) =>
-          prev.map((e) => (e._id === editingEvent._id ? j.event : e))
-        );
+        await apiFetch<{ event: Event }>(apiList.events.update(editingEvent._id), {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
         toast.success("Event updated");
-        setIsDialogOpen(false);
       } else {
-        const j = await apiFetch<{ event: Event }>(apiList.events.create, {
+        await apiFetch<{ event: Event }>(apiList.events.create, {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        setEvents((prev) => [j.event, ...prev]);
         toast.success("Event created");
-        setIsDialogOpen(false);
       }
+      await loadData();
+      broadcastAdminSync("events");
+      setIsDialogOpen(false);
     } catch (err: any) {
       toast.error(
         err?.message ||
@@ -311,58 +370,74 @@ export default function EventsPage() {
           onAdd={handleAdd}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
           searchPlaceholder='Search events...'
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalEvents}
+          paginationLabel='events'
+          onPageChange={(nextPage) => void loadData(nextPage)}
         />
       ) : (
-        <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
-          {events.map((ev) => (
-            <div key={ev._id} className='rounded-lg border p-4'>
-              <div className='flex items-start justify-between'>
-                <div>
-                  <div className='text-lg font-semibold'>{ev.title}</div>
-                  <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
-                    <MapPin className='h-3 w-3' />
-                    {ev.venue}
+        <div className='space-y-4'>
+          <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
+            {events.map((ev) => (
+              <div key={ev._id} className='rounded-lg border p-4'>
+                <div className='flex items-start justify-between'>
+                  <div>
+                    <div className='text-lg font-semibold'>{ev.title}</div>
+                    <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
+                      <MapPin className='h-3 w-3' />
+                      {ev.venue}
+                    </div>
                   </div>
+                  <Badge variant={getTypeColor(ev.type)}>
+                    {ev.type.replace(/_/g, " ")}
+                  </Badge>
                 </div>
-                <Badge variant={getTypeColor(ev.type)}>
-                  {ev.type.replace(/_/g, " ")}
-                </Badge>
+                <div className='mt-3 text-sm text-muted-foreground'>
+                  {ev.description}
+                </div>
+                <div className='mt-3 flex items-center gap-2 text-sm'>
+                  <Calendar className='h-4 w-4' />
+                  {Array.isArray(ev.occurrences) && ev.occurrences.length
+                    ? `${ev.occurrences.length} dates`
+                    : ev.date?.length
+                    ? `${ev.date.length} dates`
+                    : "-"}
+                </div>
+                <div className='mt-4 flex gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => handleEdit(ev)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => handleDelete(ev)}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
-              <div className='mt-3 text-sm text-muted-foreground'>
-                {ev.description}
-              </div>
-              <div className='mt-3 flex items-center gap-2 text-sm'>
-                <Calendar className='h-4 w-4' />
-                {Array.isArray(ev.occurrences) && ev.occurrences.length
-                  ? `${ev.occurrences.length} dates`
-                  : ev.date?.length
-                  ? `${ev.date.length} dates`
-                  : "-"}
-              </div>
-              <div className='mt-4 flex gap-2'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => handleEdit(ev)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => handleDelete(ev)}
-                >
-                  Delete
-                </Button>
-              </div>
+            ))}
+            <div className='flex items-center justify-center rounded-lg border border-dashed p-6'>
+              <Button variant='ghost' onClick={handleAdd}>
+                Add New Event
+              </Button>
             </div>
-          ))}
-          <div className='flex items-center justify-center rounded-lg border border-dashed p-6'>
-            <Button variant='ghost' onClick={handleAdd}>
-              Add New Event
-            </Button>
           </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalEvents}
+            currentCount={events.length}
+            itemLabel='events'
+            onPageChange={(nextPage) => void loadData(nextPage)}
+          />
         </div>
       )}
 
