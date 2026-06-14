@@ -18,25 +18,24 @@ export function OccurrenceListEditor({
     value?.length ? value : [{ date: "" }]
   );
 
-  const set = (i: number, patch: Partial<Occurrence>) => {
-    const next = rows.slice();
-    next[i] = { ...next[i], ...patch };
-    setRows(next);
-    onChange(next.filter((r) => r.date)); // only keep rows with a date
+  const set = (index: number, patch: Partial<Occurrence>) => {
+    const nextRows = rows.slice();
+    nextRows[index] = { ...nextRows[index], ...patch };
+    setRows(nextRows);
+    onChange(nextRows.filter((row) => row.date));
   };
 
   return (
     <div className='space-y-3'>
       <Label>Dates (with optional Season/Episode)</Label>
 
-      {rows.map((r, i) => (
-        <div key={i} className='grid grid-cols-12 gap-2'>
+      {rows.map((row, index) => (
+        <div key={index} className='grid grid-cols-12 gap-2'>
           <div className='col-span-6'>
-            {/* Keep datetime-local so you can capture time too. */}
             <Input
               type='datetime-local'
-              value={r.date ? r.date.slice(0, 16) : ""}
-              onChange={(e) => set(i, { date: e.target.value })}
+              value={row.date ? row.date.slice(0, 16) : ""}
+              onChange={(event) => set(index, { date: event.target.value })}
               required
             />
           </div>
@@ -45,10 +44,12 @@ export function OccurrenceListEditor({
             <Input
               type='number'
               placeholder='Season'
-              value={r.season ?? ""}
-              onChange={(e) =>
-                set(i, {
-                  season: e.target.value ? Number(e.target.value) : undefined,
+              value={row.season ?? ""}
+              onChange={(event) =>
+                set(index, {
+                  season: event.target.value
+                    ? Number(event.target.value)
+                    : undefined,
                 })
               }
               min={1}
@@ -59,10 +60,12 @@ export function OccurrenceListEditor({
             <Input
               type='number'
               placeholder='Episode'
-              value={r.episode ?? ""}
-              onChange={(e) =>
-                set(i, {
-                  episode: e.target.value ? Number(e.target.value) : undefined,
+              value={row.episode ?? ""}
+              onChange={(event) =>
+                set(index, {
+                  episode: event.target.value
+                    ? Number(event.target.value)
+                    : undefined,
                 })
               }
               min={1}
@@ -74,16 +77,16 @@ export function OccurrenceListEditor({
               type='button'
               variant='outline'
               onClick={() => {
-                const next = rows.slice();
-                next.splice(i, 1);
-                setRows(next.length ? next : [{ date: "" }]);
-                onChange(next.filter((r) => r.date));
+                const nextRows = rows.slice();
+                nextRows.splice(index, 1);
+                setRows(nextRows.length ? nextRows : [{ date: "" }]);
+                onChange(nextRows.filter((row) => row.date));
               }}
             >
               Remove
             </Button>
 
-            {i === rows.length - 1 && (
+            {index === rows.length - 1 && (
               <Button
                 type='button'
                 onClick={() => setRows([...rows, { date: "" }])}

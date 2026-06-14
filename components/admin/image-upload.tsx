@@ -1,13 +1,14 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X, ImageIcon, Loader2 } from "lucide-react";
 import Image from "next/image";
 import apiList from "@/apiList";
+import { getToken } from "@/lib/api-fetch";
 import { toast } from "react-toastify";
 
 interface ImageUploadProps {
@@ -17,6 +18,8 @@ interface ImageUploadProps {
   placeholder?: string;
   required?: boolean;
   maxSizeMB?: number;
+  allowUrlInput?: boolean;
+  error?: string;
 }
 
 export function ImageUpload({
@@ -26,11 +29,17 @@ export function ImageUpload({
   placeholder = "https://...",
   required = false,
   maxSizeMB = 10,
+  allowUrlInput = true,
+  error,
 }: ImageUploadProps) {
   const [preview, setPreview] = useState<string>(value || "");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setPreview(value || "");
+  }, [value]);
 
   // --- tiny uploader (multipart) ---
   async function uploadFile(file: File) {
@@ -52,14 +61,12 @@ export function ImageUpload({
 
       const fd = new FormData();
       fd.append("image", file);
+      const token = getToken();
 
       const res = await fetch(apiList.upload.image, {
         method: "POST",
         body: fd,
-        // if your API auth uses cookies:
-        // credentials: "include",
-        // if you use bearer tokens instead, add:
-        // headers: { Authorization: `Bearer ${yourToken}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       if (!res.ok) {
@@ -134,7 +141,7 @@ export function ImageUpload({
             {isUploading && (
               <span className='inline-flex items-center rounded bg-background/80 px-2 py-1 text-xs'>
                 <Loader2 className='mr-1 h-3 w-3 animate-spin' />
-                Uploading…
+                Uploading...
               </span>
             )}
             <Button
@@ -156,7 +163,9 @@ export function ImageUpload({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
-          isDragging
+          error
+            ? "border-destructive bg-destructive/5"
+            : isDragging
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25"
         } ${isUploading ? "opacity-70" : ""}`}
@@ -178,7 +187,7 @@ export function ImageUpload({
               className='font-semibold text-primary hover:underline'
               disabled={isUploading}
             >
-              {isUploading ? "Uploading…" : "Click to upload"}
+              {isUploading ? "Uploading..." : "Click to upload"}
             </button>
             <span className='text-muted-foreground'> or drag and drop</span>
           </div>
@@ -188,20 +197,25 @@ export function ImageUpload({
         </div>
       </div>
 
-      <div className='space-y-2'>
-        <Label htmlFor={`${label}-image-url`} className='text-xs'>
-          Or paste image URL
-        </Label>
-        <Input
-          id={`${label}-image-url`}
-          type='url'
-          value={value}
-          onChange={handleUrlChange}
-          placeholder={placeholder}
-          disabled={isUploading}
-          required={required && !preview}
-        />
-      </div>
+      {allowUrlInput && (
+        <div className='space-y-2'>
+          <Label htmlFor={`${label}-image-url`} className='text-xs'>
+            Or paste image URL
+          </Label>
+          <Input
+            id={`${label}-image-url`}
+            type='url'
+            value={value}
+            onChange={handleUrlChange}
+            placeholder={placeholder}
+            disabled={isUploading}
+            aria-invalid={!!error}
+            required={required && !preview}
+          />
+        </div>
+      )}
+
+      {error ? <p className='text-sm text-destructive'>{error}</p> : null}
     </div>
   );
 }

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
 import { runBulkDelete } from "@/lib/bulk-actions";
 import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
 import { broadcastAdminSync, useAdminSync } from "@/hooks/use-admin-sync";
-
 import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
 import { PaginationControls } from "@/components/admin/pagination-controls";
@@ -19,10 +18,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EventForm } from "@/components/admin/forms/event-form";
-import { Calendar, MapPin, Grid3x3, List } from "lucide-react";
+import { Calendar, Grid3x3, List, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
-import { isoToLocalInput, localInputToIso } from "@/lib/tz";
+import {
+  buildSchedulePayload,
+  formatScheduleSummary,
+  type LegacyOccurrence,
+  type RangeDay,
+} from "@/lib/event-schedule";
 
 interface Brand {
   _id: string;
@@ -34,21 +38,28 @@ interface Brand {
 interface Event {
   _id: string;
   title: string;
-  date: string[]; // ISO strings
+  slug?: string;
+  showKey?: string;
+  date: string[];
+  scheduleMode?: "single" | "range";
+  singleDateTime?: string | null;
+  rangeStartDate?: string;
+  rangeEndDate?: string;
+  rangeDays?: RangeDay[];
   venue: string;
   type: "Free" | "Free_with_approval" | "Paid" | "Paid_with_approval";
   description: string;
   imageLinkBg?: string;
   imageLinkOverlay?: string;
+  category?: string;
+  ticketUrl?: string;
+  city?: string;
+  country?: string;
   brands?: Array<
     string | { _id: string; brandName: string; imageLink?: string }
   >;
   customFields?: any[];
-  occurrences?: Array<{
-    date: string; // ISO string
-    season?: number;
-    episode?: number;
-  }>;
+  occurrences?: LegacyOccurrence[];
 }
 
 type EventsResponse = {
@@ -65,9 +76,7 @@ type EventsResponse = {
 const PAGE_SIZE = 12;
 
 export default function EventsPage() {
-  // Enforce auth + redirect to /login if unauthenticated
   const { isLoading: authLoading } = useAuth({ redirectOnUnauthed: true });
-
   const [events, setEvents] = useState<Event[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -75,86 +84,70 @@ export default function EventsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalEvents, setTotalEvents] = useState(0);
-
-  // brands master list
   const [brands, setBrands] = useState<Brand[]>([]);
-
-  // ---------- confirm dialog state ----------
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTitle, setConfirmTitle] = useState("");
   const [confirmDesc, setConfirmDesc] = useState("");
-  const confirmResolveRef = useRef<((v: boolean) => void) | undefined>(
+  const confirmResolveRef = useRef<((value: boolean) => void) | undefined>(
     undefined
   );
 
-  const askConfirm = (title: string, desc: string) =>
+  const askConfirm = (title: string, description: string) =>
     new Promise<boolean>((resolve) => {
       confirmResolveRef.current = resolve;
       setConfirmTitle(title);
-      setConfirmDesc(desc);
+      setConfirmDesc(description);
       setConfirmOpen(true);
     });
 
-  const resolveConfirm = (v: boolean) => {
+  const resolveConfirm = (value: boolean) => {
     setConfirmOpen(false);
-    confirmResolveRef.current?.(v);
+    confirmResolveRef.current?.(value);
     confirmResolveRef.current = undefined;
   };
 
   const loadData = async (pageToLoad = page) => {
     try {
-      const [{ events: evs = [], data: d, ...eventResponse }, { brands: brs = [] }] =
-        await Promise.all([
-          apiFetch<EventsResponse>(
-            withQuery(apiList.events.list, {
-              page: pageToLoad,
-              limit: PAGE_SIZE,
-            })
-          ),
-          apiFetch<{ brands: Brand[] }>(apiList.brands.list),
-        ]);
+      const [
+        { events: fetchedEvents = [], data: fallbackEvents, ...eventResponse },
+        { brands: fetchedBrands = [] },
+      ] = await Promise.all([
+        apiFetch<EventsResponse>(
+          withQuery(apiList.events.list, {
+            page: pageToLoad,
+            limit: PAGE_SIZE,
+          })
+        ),
+        apiFetch<{ brands: Brand[] }>(apiList.brands.list),
+      ]);
+
       const pagination = resolvePagination(eventResponse, PAGE_SIZE);
-      setEvents(evs?.length ? evs : d || []);
-      setBrands(brs);
+      setEvents(fetchedEvents.length ? fetchedEvents : fallbackEvents || []);
+      setBrands(fetchedBrands);
       setPage(pagination.page);
       setTotalPages(pagination.pages);
       setTotalEvents(pagination.total);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to load events/brands");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to load events or brands");
     }
   };
 
-  // ---------- load ----------
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading) {
+      return;
+    }
+
     void loadData();
   }, [authLoading]);
 
   useAdminSync(["events", "brands"], () => {
-    if (authLoading) return;
+    if (authLoading) {
+      return;
+    }
+
     void loadData(page);
   });
 
-  // Resolve associated brand objects for the currently edited event
-  const editingEventBrands: Brand[] = useMemo(() => {
-    if (!editingEvent?.brands?.length) return [];
-    return editingEvent.brands
-      .map((b) => {
-        if (typeof b === "string") return brands.find((x) => x._id === b);
-        const fromId = brands.find((x) => x._id === (b as any)._id);
-        return (
-          fromId ||
-          ({
-            _id: (b as any)._id,
-            brandName: (b as any).brandName,
-            imageLink: (b as any).imageLink,
-          } as Brand)
-        );
-      })
-      .filter(Boolean) as Brand[];
-  }, [editingEvent, brands]);
-
-  // ---------- CRUD ----------
   const handleAdd = () => {
     setEditingEvent(null);
     setIsDialogOpen(true);
@@ -166,29 +159,36 @@ export default function EventsPage() {
   };
 
   const handleDelete = async (event: Event) => {
-    const ok = await askConfirm(
+    const shouldDelete = await askConfirm(
       "Delete Event",
       `Are you sure you want to delete "${event.title}"?`
     );
-    if (!ok) return;
+
+    if (!shouldDelete) {
+      return;
+    }
+
     try {
       await apiFetch(apiList.events.delete(event._id), { method: "DELETE" });
       await loadData();
       broadcastAdminSync("events");
       toast.success("Event deleted");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete event");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to delete event");
     }
   };
 
   const handleBulkDelete = async (selectedEvents: Event[]) => {
-    const ok = await askConfirm(
+    const shouldDelete = await askConfirm(
       "Delete Events",
       `Are you sure you want to delete ${selectedEvents.length} selected event${
         selectedEvents.length === 1 ? "" : "s"
       }?`
     );
-    if (!ok) return false;
+
+    if (!shouldDelete) {
+      return false;
+    }
 
     const { successCount, failureCount, errors } = await runBulkDelete(
       selectedEvents,
@@ -209,16 +209,11 @@ export default function EventsPage() {
     }
   };
 
-  const handleSave = async (data: Partial<Event>) => {
+  const handleSave = async (data: any) => {
+    const { schedule, ...rest } = data;
     const payload = {
-      ...data,
-      occurrences: data.occurrences?.map((o: any) => ({
-        date: localInputToIso(o.date), // 👈 BD local → ISO
-        season: o.season || undefined,
-        episode: o.episode || undefined,
-      })),
-      // legacy mirror if you still support it on the backend:
-      date: data.occurrences?.map((o: any) => new Date(o.date).toISOString()),
+      ...rest,
+      ...buildSchedulePayload(schedule),
     };
 
     try {
@@ -235,18 +230,18 @@ export default function EventsPage() {
         });
         toast.success("Event created");
       }
+
       await loadData();
       broadcastAdminSync("events");
       setIsDialogOpen(false);
-    } catch (err: any) {
+    } catch (error: any) {
       toast.error(
-        err?.message ||
+        error?.message ||
           (editingEvent ? "Failed to update event" : "Failed to create event")
       );
     }
   };
 
-  // ---------- UI helpers ----------
   const getTypeColor = (
     type: Event["type"]
   ): "default" | "secondary" | "destructive" | "outline" => {
@@ -271,6 +266,11 @@ export default function EventsPage() {
       render: (event: Event) => (
         <div className='space-y-1'>
           <div className='font-medium'>{event.title}</div>
+          {event.category === "what_a_show" && event.showKey ? (
+            <div className='text-xs text-muted-foreground'>
+              Key: <span className='font-mono'>{event.showKey}</span>
+            </div>
+          ) : null}
           <div className='flex items-center gap-2 text-xs text-muted-foreground'>
             <MapPin className='h-3 w-3' />
             {event.venue}
@@ -279,19 +279,22 @@ export default function EventsPage() {
       ),
     },
     {
-      key: "date",
-      label: "Date(s)",
+      key: "schedule",
+      label: "Schedule",
       render: (event: Event) => (
         <div className='flex items-center gap-2'>
           <Calendar className='h-4 w-4 text-muted-foreground' />
-          <span className='text-sm'>
-            {Array.isArray(event.occurrences) && event.occurrences.length
-              ? `${event.occurrences.length} dates`
-              : event.date?.length
-              ? `${event.date.length} dates`
-              : "-"}
-          </span>
+          <span className='text-sm'>{formatScheduleSummary(event)}</span>
         </div>
+      ),
+    },
+    {
+      key: "category",
+      label: "Group",
+      render: (event: Event) => (
+        <Badge variant='outline'>
+          {event.category === "what_a_show" ? "What a Show" : "Other"}
+        </Badge>
       ),
     },
     {
@@ -323,15 +326,17 @@ export default function EventsPage() {
     },
   ];
 
-  // loading skeleton while auth resolves
   if (authLoading) {
     return (
       <div className='p-8'>
         <div className='mb-2 h-6 w-40 animate-pulse rounded bg-muted' />
         <div className='h-4 w-64 animate-pulse rounded bg-muted' />
         <div className='mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className='h-28 rounded-lg bg-muted animate-pulse' />
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className='h-28 animate-pulse rounded-lg bg-muted'
+            />
           ))}
         </div>
       </div>
@@ -381,55 +386,67 @@ export default function EventsPage() {
       ) : (
         <div className='space-y-4'>
           <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
-            {events.map((ev) => (
-              <div key={ev._id} className='rounded-lg border p-4'>
-                <div className='flex items-start justify-between'>
+            {events.map((event) => (
+              <div key={event._id} className='rounded-lg border p-4'>
+                <div className='flex items-start justify-between gap-3'>
                   <div>
-                    <div className='text-lg font-semibold'>{ev.title}</div>
+                    <div className='text-lg font-semibold'>{event.title}</div>
+                    {event.category === "what_a_show" && event.showKey ? (
+                      <div className='mt-1 font-mono text-xs text-muted-foreground'>
+                        {event.showKey}
+                      </div>
+                    ) : null}
                     <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
                       <MapPin className='h-3 w-3' />
-                      {ev.venue}
+                      {event.venue}
                     </div>
                   </div>
-                  <Badge variant={getTypeColor(ev.type)}>
-                    {ev.type.replace(/_/g, " ")}
+                  <Badge variant={getTypeColor(event.type)}>
+                    {event.type.replace(/_/g, " ")}
                   </Badge>
                 </div>
-                <div className='mt-3 text-sm text-muted-foreground'>
-                  {ev.description}
-                </div>
+
                 <div className='mt-3 flex items-center gap-2 text-sm'>
                   <Calendar className='h-4 w-4' />
-                  {Array.isArray(ev.occurrences) && ev.occurrences.length
-                    ? `${ev.occurrences.length} dates`
-                    : ev.date?.length
-                    ? `${ev.date.length} dates`
-                    : "-"}
+                  {formatScheduleSummary(event)}
                 </div>
+
+                <div className='mt-3'>
+                  <Badge variant='outline'>
+                    {event.category === "what_a_show" ? "What a Show" : "Other"}
+                  </Badge>
+                </div>
+
+                <div className='mt-3 text-sm text-muted-foreground line-clamp-3'>
+                  {event.description}
+                </div>
+
                 <div className='mt-4 flex gap-2'>
                   <Button
                     variant='outline'
                     size='sm'
-                    onClick={() => handleEdit(ev)}
+                    onClick={() => handleEdit(event)}
                   >
                     Edit
                   </Button>
                   <Button
                     variant='outline'
                     size='sm'
-                    onClick={() => handleDelete(ev)}
+                    onClick={() => handleDelete(event)}
                   >
                     Delete
                   </Button>
                 </div>
               </div>
             ))}
+
             <div className='flex items-center justify-center rounded-lg border border-dashed p-6'>
               <Button variant='ghost' onClick={handleAdd}>
                 Add New Event
               </Button>
             </div>
           </div>
+
           <PaginationControls
             page={page}
             totalPages={totalPages}
@@ -441,27 +458,18 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Form dialog (scrollable) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        {/* outer: width + clip overflow */}
-        <DialogContent className='w-[95vw] sm:max-w-3xl p-0 overflow-hidden'>
-          {/* sticky header stays put */}
-          <DialogHeader className='sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-6 py-4'>
+        <DialogContent className='w-[95vw] overflow-hidden p-0 sm:max-w-3xl'>
+          <DialogHeader className='sticky top-0 z-10 border-b bg-background/95 px-6 py-4 backdrop-blur'>
             <DialogTitle>
               {editingEvent ? "Edit Event" : "Add New Event"}
             </DialogTitle>
           </DialogHeader>
 
-          {/* inner: the ONLY scroll area */}
-          <div className='px-6 pt-5 pb-2 max-h-[calc(90vh-64px)] overflow-y-auto'>
+          <div className='max-h-[calc(90vh-64px)] overflow-y-auto px-6 pb-2 pt-5'>
             <EventForm
               initialData={editingEvent || undefined}
               brands={brands}
-              onBrandsChange={(ids) =>
-                setEditingEvent((prev) =>
-                  prev ? { ...prev, brands: ids } : prev
-                )
-              }
               onSave={handleSave}
               onCancel={() => setIsDialogOpen(false)}
             />
@@ -469,11 +477,12 @@ export default function EventsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm dialog */}
       <Dialog
         open={confirmOpen}
         onOpenChange={(open) => {
-          if (!open) resolveConfirm(false);
+          if (!open) {
+            resolveConfirm(false);
+          }
         }}
       >
         <DialogContent className='sm:max-w-md'>
