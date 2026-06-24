@@ -175,6 +175,21 @@ const sanitizeFields = (raw: unknown): CustomField[] =>
     .filter((field) => field && typeof field === "object")
     .map((field) => makeField(field as Partial<CustomField>));
 
+const getDefaultCustomFields = (): CustomField[] => [
+  makeField({ label: "Full Name", type: "text", required: true }),
+  makeField({ label: "Facebook Profile Link", type: "text", required: true }),
+  makeField({ label: "Email", type: "email", required: true }),
+  makeField({ label: "Phone Number", type: "phone", required: true }),
+  makeField({ label: "Which Episode do you wish to attend?", type: "text", required: true }),
+  makeField({ label: "Tell us how you feel about WHAT A SHOW!", type: "textarea", required: true }),
+  makeField({ label: "Any question for the guests?", type: "textarea", required: false }),
+  makeField({
+    label: "If you want to increase your chances of being selected, share a video of what a show on social media with the hashtag #whataseason5. Put the link of your post in this box!",
+    type: "text",
+    required: false,
+  }),
+];
+
 const isValidHttpUrl = (value: string) => {
   try {
     const url = new URL(value);
@@ -251,7 +266,9 @@ function buildInitialFormData(
     imageLinkBg: initialData?.imageLinkBg || "",
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
     brands: brandIds,
-    customFields: sanitizeFields(initialData?.customFields),
+    customFields: initialData
+      ? sanitizeFields(initialData.customFields)
+      : getDefaultCustomFields(),
     category: normalizeEventCategoryValue(initialData?.category),
     ticketUrl: initialData?.ticketUrl || "",
     city: initialData?.city || "",

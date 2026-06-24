@@ -219,7 +219,7 @@ const apiList = {
 
 
   upload: {
-    image: `${API_BASE}/upload-image`,
+    image: "https://api.rafsansabab.com/api/upload-image",
   },
 };
 

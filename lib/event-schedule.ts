@@ -9,13 +9,16 @@ export type LegacyOccurrence = {
   date: string;
   season?: number;
   episode?: number;
+  image?: string;
 };
 
 export type RangeDay = {
+  id?: string;
   date: string;
   enabled: boolean;
   startTime: string;
   endTime: string;
+  image?: string;
 };
 
 export type EventScheduleShape = {
@@ -37,6 +40,12 @@ export type EventScheduleFormValue = {
 };
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function generateId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 9);
+}
 
 function pad(value: number) {
   return String(value).padStart(2, "0");
@@ -109,21 +118,25 @@ export function buildRangeDays(
     return [];
   }
 
-  const byDate = existingDays.reduce<Map<string, RangeDay>>((map, day) => {
+  const byDate = existingDays.reduce<Map<string, RangeDay[]>>((map, day) => {
     const normalizedDate = normalizeDateOnly(day?.date || "");
     if (!normalizedDate) {
       return map;
     }
 
-    map.set(normalizedDate, {
+    const arr = map.get(normalizedDate) || [];
+    arr.push({
+      id: day.id || generateId(),
       date: normalizedDate,
       enabled: Boolean(day.enabled),
       startTime: normalizeTimeOnly(day.startTime),
       endTime: normalizeTimeOnly(day.endTime),
+      image: day.image || "",
     });
+    map.set(normalizedDate, arr);
 
     return map;
-  }, new Map<string, RangeDay>());
+  }, new Map<string, RangeDay[]>());
 
   const days: RangeDay[] = [];
   const cursor = parseDateOnly(normalizedStart);
@@ -133,19 +146,48 @@ export function buildRangeDays(
     const date = formatDateOnly(cursor);
     const existing = byDate.get(date);
 
-    days.push(
-      existing || {
+    if (existing && existing.length > 0) {
+      days.push(...existing);
+    } else {
+      days.push({
+        id: generateId(),
         date,
         enabled: true,
         startTime: seedStartTime,
         endTime: "",
-      }
-    );
+        image: "",
+      });
+    }
 
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return days;
+}
+
+export function addRangeDaySlot(rangeDays: RangeDay[], date: string) {
+  const seedDay = rangeDays.find((d) => d.date === date);
+  const newDay: RangeDay = {
+    id: generateId(),
+    date,
+    enabled: true,
+    startTime: seedDay?.startTime || "",
+    endTime: "",
+    image: "",
+  };
+
+  const nextDays = [...rangeDays];
+  const lastIndex = nextDays.findLastIndex((d) => d.date === date);
+  if (lastIndex >= 0) {
+    nextDays.splice(lastIndex + 1, 0, newDay);
+  } else {
+    nextDays.push(newDay);
+  }
+  return nextDays;
+}
+
+export function removeRangeDaySlot(rangeDays: RangeDay[], id: string) {
+  return rangeDays.filter((d) => d.id !== id);
 }
 
 export function inferScheduleFromEvent(
@@ -167,6 +209,8 @@ export function inferScheduleFromEvent(
           enabled: typeof day.enabled === "boolean" ? day.enabled : true,
           startTime: normalizeTimeOnly(day.startTime),
           endTime: normalizeTimeOnly(day.endTime),
+          image: day.image || "",
+          id: day.id || generateId(),
         }))
       : [];
     const legacyDays = legacyOccurrences

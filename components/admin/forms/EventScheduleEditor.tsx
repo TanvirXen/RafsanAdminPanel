@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Trash2, Plus } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,10 +15,13 @@ import {
 } from "@/components/ui/select";
 import {
   buildRangeDays,
+  addRangeDaySlot,
+  removeRangeDaySlot,
   formatRangeDayLabel,
   type EventScheduleFormValue,
   type EventScheduleMode,
 } from "@/lib/event-schedule";
+import { ImageUpload } from "@/components/admin/image-upload";
 
 function dateFromDateTimeLocal(value: string) {
   return value ? value.slice(0, 10) : "";
@@ -106,16 +111,36 @@ export function EventScheduleEditor({
   };
 
   const handleRangeDayChange = (
-    date: string,
+    targetDay: EventScheduleFormValue["rangeDays"][number],
     patch: Partial<EventScheduleFormValue["rangeDays"][number]>
   ) => {
     onChange({
       ...value,
       rangeDays: value.rangeDays.map((day) =>
-        day.date === date ? { ...day, ...patch } : day
+        day === targetDay ? { ...day, ...patch } : day
       ),
     });
   };
+
+  const handleAddSlot = (date: string) => {
+    onChange({
+      ...value,
+      rangeDays: addRangeDaySlot(value.rangeDays, date),
+    });
+  };
+
+  const handleRemoveSlot = (id: string) => {
+    onChange({
+      ...value,
+      rangeDays: removeRangeDaySlot(value.rangeDays, id),
+    });
+  };
+
+  const groupedDays = value.rangeDays.reduce((acc, day) => {
+    if (!acc[day.date]) acc[day.date] = [];
+    acc[day.date].push(day);
+    return acc;
+  }, {} as Record<string, EventScheduleFormValue["rangeDays"]>);
 
   return (
     <Card className={errors?.schedule ? "border-destructive/60" : undefined}>
@@ -221,69 +246,110 @@ export function EventScheduleEditor({
                 <p className='text-sm text-destructive'>{errors.rangeDays}</p>
               ) : null}
 
-              {value.rangeDays.length ? (
-                value.rangeDays.map((day) => (
-                  <div
-                    key={day.date}
-                    className={`grid gap-3 rounded-xl border p-4 md:grid-cols-[1.8fr,0.7fr,1fr,1fr] ${
-                      errors?.rangeDays ? "border-destructive/60" : ""
-                    }`}
-                  >
-                    <div className='space-y-1'>
+              {Object.keys(groupedDays).length ? (
+                Object.entries(groupedDays).map(([date, slots]) => (
+                  <div key={date} className='space-y-4 rounded-xl border p-4'>
+                    <div className='space-y-1 border-b pb-3'>
                       <div className='text-sm font-medium'>
-                        {formatRangeDayLabel(day.date)}
+                        {formatRangeDayLabel(date)}
                       </div>
                       <div className='text-xs text-muted-foreground'>
-                        {day.date}
+                        {date}
                       </div>
                     </div>
 
-                    <label className='flex items-center gap-2 text-sm font-medium'>
-                      <Checkbox
-                        checked={day.enabled}
-                        onCheckedChange={(checked) =>
-                          handleRangeDayChange(day.date, {
-                            enabled: Boolean(checked),
-                          })
-                        }
-                      />
-                      Active
-                    </label>
+                    <div className='space-y-4'>
+                      {slots.map((day, idx) => (
+                        <div
+                          key={day.id}
+                          className={`relative grid gap-3 rounded-xl border p-4 md:grid-cols-[0.8fr,1fr,1fr] bg-muted/20 ${
+                            errors?.rangeDays ? "border-destructive/60" : ""
+                          }`}
+                        >
+                          {slots.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleRemoveSlot(day.id!)}
+                              title="Remove slot"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
 
-                    <div className='space-y-2'>
-                      <Label htmlFor={`start-${day.date}`}>Start Time</Label>
-                      <Input
-                        id={`start-${day.date}`}
-                        type='time'
-                        value={day.startTime}
-                        disabled={!day.enabled}
-                        onChange={(event) =>
-                          handleRangeDayChange(day.date, {
-                            startTime: event.target.value,
-                          })
-                        }
-                      />
+                          <label className='flex items-center gap-2 text-sm font-medium'>
+                            <Checkbox
+                              checked={day.enabled}
+                              onCheckedChange={(checked) =>
+                                handleRangeDayChange(day, {
+                                  enabled: Boolean(checked),
+                                })
+                              }
+                            />
+                            Active
+                          </label>
+
+                          <div className='space-y-2'>
+                            <Label htmlFor={`start-${day.id}`}>Start Time</Label>
+                            <Input
+                              id={`start-${day.id}`}
+                              type='time'
+                              value={day.startTime}
+                              disabled={!day.enabled}
+                              onChange={(event) =>
+                                handleRangeDayChange(day, {
+                                  startTime: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
+
+                          <div className='space-y-2'>
+                            <Label htmlFor={`end-${day.id}`}>End Time</Label>
+                            <Input
+                              id={`end-${day.id}`}
+                              type='time'
+                              value={day.endTime}
+                              disabled={!day.enabled}
+                              onChange={(event) =>
+                                handleRangeDayChange(day, {
+                                  endTime: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
+
+                          <div className='col-span-full mt-2'>
+                            <ImageUpload
+                              label={slots.length > 1 ? `Occurrence specific image (Slot ${idx + 1} - Optional)` : 'Occurrence specific image (Optional)'}
+                              value={day.image || ""}
+                              onChange={(url) =>
+                                handleRangeDayChange(day, { image: url })
+                              }
+                              allowUrlInput={false}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
-                    <div className='space-y-2'>
-                      <Label htmlFor={`end-${day.date}`}>End Time</Label>
-                      <Input
-                        id={`end-${day.date}`}
-                        type='time'
-                        value={day.endTime}
-                        disabled={!day.enabled}
-                        onChange={(event) =>
-                          handleRangeDayChange(day.date, {
-                            endTime: event.target.value,
-                          })
-                        }
-                      />
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full text-xs border-dashed"
+                      onClick={() => handleAddSlot(date)}
+                    >
+                      <Plus className="mr-2 h-3 w-3" />
+                      Add another slot for this date
+                    </Button>
                   </div>
                 ))
               ) : (
-                <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
-                  Choose a valid start and end date to generate the range days.
+                <div className='text-sm text-muted-foreground'>
+                  Select a start and end date to configure daily timings.
                 </div>
               )}
             </div>
