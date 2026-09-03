@@ -57,7 +57,7 @@ const defaultSettings: NewsletterSettingsDto = {
   title: "Subscribe to\nMy Newsletter!",
   shortBlurb: "Stay updated on my latest shows and events.",
   longText:
-    "I use this newsletter to share the most actionable tips from my journey, and the stories behind the shows. Get all the things that truly matter—communication strategies, real-world insights, and moments of sincere humor—delivered straight to your inbox.",
+    "I share practical lessons from hosting, stories from behind the shows, and occasional notes on communication, creativity, and entertainment. You will hear from me when there is something useful or worth sharing.",
   buttonLabel: "Subscribe",
 };
 
