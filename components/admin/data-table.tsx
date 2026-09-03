@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PaginationControls } from "@/components/admin/pagination-controls"
-import { Search, Plus, Pencil, Trash2 } from "lucide-react"
+import { Search, Plus, Pencil, Trash2, Archive } from "lucide-react"
 
 interface Column<T> {
   key: keyof T | string
@@ -22,6 +22,7 @@ interface DataTableProps<T> {
   onAdd?: () => void
   onEdit?: (item: T) => void
   onDelete?: (item: T) => void
+  onArchive?: (item: T) => void
   onBulkDelete?: (items: T[]) => Promise<boolean | void> | boolean | void
   isRowSelectable?: (item: T) => boolean
   bulkDeleteLabel?: string
@@ -41,6 +42,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   onAdd,
   onEdit,
   onDelete,
+  onArchive,
   onBulkDelete,
   isRowSelectable,
   bulkDeleteLabel = "Delete Selected",
@@ -106,7 +108,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   })
   const allSelected = selectableIds.length > 0 && selectedIds.length === selectableIds.length
   const someSelected = selectedIds.length > 0 && !allSelected
-  const columnCount = columns.length + (selectionEnabled ? 1 : 0) + (onEdit || onDelete ? 1 : 0)
+  const columnCount = columns.length + (selectionEnabled ? 1 : 0) + (onEdit || onDelete || onArchive ? 1 : 0)
 
   const toggleRow = (item: T, checked: boolean) => {
     const id = getRowId(item)
@@ -193,7 +195,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
               {columns.map((column) => (
                 <TableHead key={String(column.key)}>{column.label}</TableHead>
               ))}
-              {(onEdit || onDelete) && <TableHead className="w-24">Actions</TableHead>}
+              {(onEdit || onDelete || onArchive) && <TableHead className="w-32">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -228,12 +230,17 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                       </div>
                     </TableCell>
                   ))}
-                  {(onEdit || onDelete) && (
+                  {(onEdit || onDelete || onArchive) && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         {onEdit && (
                           <Button variant="ghost" size="icon" onClick={() => onEdit(item)}>
                             <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {onArchive && (
+                          <Button variant="ghost" size="icon" onClick={() => onArchive(item)} title="Archive">
+                            <Archive className="h-4 w-4" />
                           </Button>
                         )}
                         {onDelete && (

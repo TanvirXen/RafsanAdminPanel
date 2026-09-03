@@ -4,8 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Trash2, Plus } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -15,8 +13,6 @@ import {
 } from "@/components/ui/select";
 import {
   buildRangeDays,
-  addRangeDaySlot,
-  removeRangeDaySlot,
   formatRangeDayLabel,
   type EventScheduleFormValue,
   type EventScheduleMode,
@@ -122,25 +118,10 @@ export function EventScheduleEditor({
     });
   };
 
-  const handleAddSlot = (date: string) => {
-    onChange({
-      ...value,
-      rangeDays: addRangeDaySlot(value.rangeDays, date),
-    });
-  };
-
-  const handleRemoveSlot = (id: string) => {
-    onChange({
-      ...value,
-      rangeDays: removeRangeDaySlot(value.rangeDays, id),
-    });
-  };
-
   const groupedDays = value.rangeDays.reduce((acc, day) => {
-    if (!acc[day.date]) acc[day.date] = [];
-    acc[day.date].push(day);
+    if (!acc[day.date]) acc[day.date] = day;
     return acc;
-  }, {} as Record<string, EventScheduleFormValue["rangeDays"]>);
+  }, {} as Record<string, EventScheduleFormValue["rangeDays"][number]>);
 
   return (
     <Card className={errors?.schedule ? "border-destructive/60" : undefined}>
@@ -247,7 +228,7 @@ export function EventScheduleEditor({
               ) : null}
 
               {Object.keys(groupedDays).length ? (
-                Object.entries(groupedDays).map(([date, slots]) => (
+                Object.entries(groupedDays).map(([date, day]) => (
                   <div key={date} className='space-y-4 rounded-xl border p-4'>
                     <div className='space-y-1 border-b pb-3'>
                       <div className='text-sm font-medium'>
@@ -258,28 +239,12 @@ export function EventScheduleEditor({
                       </div>
                     </div>
 
-                    <div className='space-y-4'>
-                      {slots.map((day, idx) => (
-                        <div
-                          key={day.id}
-                          className={`relative grid gap-3 rounded-xl border p-4 md:grid-cols-[0.8fr,1fr,1fr] bg-muted/20 ${
-                            errors?.rangeDays ? "border-destructive/60" : ""
-                          }`}
-                        >
-                          {slots.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleRemoveSlot(day.id!)}
-                              title="Remove slot"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          <label className='flex items-center gap-2 text-sm font-medium'>
+                    <div
+                      className={`grid gap-3 rounded-xl border p-4 md:grid-cols-[0.8fr,1fr,1fr] bg-muted/20 ${
+                        errors?.rangeDays ? "border-destructive/60" : ""
+                      }`}
+                    >
+                      <label className='flex items-center gap-2 text-sm font-medium'>
                             <Checkbox
                               checked={day.enabled}
                               onCheckedChange={(checked) =>
@@ -289,9 +254,9 @@ export function EventScheduleEditor({
                               }
                             />
                             Active
-                          </label>
+                      </label>
 
-                          <div className='space-y-2'>
+                      <div className='space-y-2'>
                             <Label htmlFor={`start-${day.id}`}>Start Time</Label>
                             <Input
                               id={`start-${day.id}`}
@@ -304,9 +269,9 @@ export function EventScheduleEditor({
                                 })
                               }
                             />
-                          </div>
+                      </div>
 
-                          <div className='space-y-2'>
+                      <div className='space-y-2'>
                             <Label htmlFor={`end-${day.id}`}>End Time</Label>
                             <Input
                               id={`end-${day.id}`}
@@ -319,32 +284,20 @@ export function EventScheduleEditor({
                                 })
                               }
                             />
-                          </div>
+                      </div>
 
-                          <div className='col-span-full mt-2'>
-                            <ImageUpload
-                              label={slots.length > 1 ? `Occurrence specific image (Slot ${idx + 1} - Optional)` : 'Occurrence specific image (Optional)'}
-                              value={day.image || ""}
-                              onChange={(url) =>
-                                handleRangeDayChange(day, { image: url })
-                              }
-                              allowUrlInput={false}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                      <div className='col-span-full mt-2'>
+                        <ImageUpload
+                          label='Occurrence specific image (Optional)'
+                          value={day.image || ""}
+                          onChange={(url) =>
+                            handleRangeDayChange(day, { image: url })
+                          }
+                          allowUrlInput={false}
+                        />
+                      </div>
                     </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 w-full text-xs border-dashed"
-                      onClick={() => handleAddSlot(date)}
-                    >
-                      <Plus className="mr-2 h-3 w-3" />
-                      Add another slot for this date
-                    </Button>
                   </div>
                 ))
               ) : (

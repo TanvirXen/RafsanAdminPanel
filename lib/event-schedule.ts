@@ -118,25 +118,25 @@ export function buildRangeDays(
     return [];
   }
 
-  const byDate = existingDays.reduce<Map<string, RangeDay[]>>((map, day) => {
+  const byDate = existingDays.reduce<Map<string, RangeDay>>((map, day) => {
     const normalizedDate = normalizeDateOnly(day?.date || "");
     if (!normalizedDate) {
       return map;
     }
 
-    const arr = map.get(normalizedDate) || [];
-    arr.push({
-      id: day.id || generateId(),
-      date: normalizedDate,
-      enabled: Boolean(day.enabled),
-      startTime: normalizeTimeOnly(day.startTime),
-      endTime: normalizeTimeOnly(day.endTime),
-      image: day.image || "",
-    });
-    map.set(normalizedDate, arr);
+    if (!map.has(normalizedDate)) {
+      map.set(normalizedDate, {
+        id: day.id || generateId(),
+        date: normalizedDate,
+        enabled: Boolean(day.enabled),
+        startTime: normalizeTimeOnly(day.startTime),
+        endTime: normalizeTimeOnly(day.endTime),
+        image: day.image || "",
+      });
+    }
 
     return map;
-  }, new Map<string, RangeDay[]>());
+  }, new Map<string, RangeDay>());
 
   const days: RangeDay[] = [];
   const cursor = parseDateOnly(normalizedStart);
@@ -146,8 +146,8 @@ export function buildRangeDays(
     const date = formatDateOnly(cursor);
     const existing = byDate.get(date);
 
-    if (existing && existing.length > 0) {
-      days.push(...existing);
+    if (existing) {
+      days.push(existing);
     } else {
       days.push({
         id: generateId(),
@@ -163,31 +163,6 @@ export function buildRangeDays(
   }
 
   return days;
-}
-
-export function addRangeDaySlot(rangeDays: RangeDay[], date: string) {
-  const seedDay = rangeDays.find((d) => d.date === date);
-  const newDay: RangeDay = {
-    id: generateId(),
-    date,
-    enabled: true,
-    startTime: seedDay?.startTime || "",
-    endTime: "",
-    image: "",
-  };
-
-  const nextDays = [...rangeDays];
-  const lastIndex = nextDays.findLastIndex((d) => d.date === date);
-  if (lastIndex >= 0) {
-    nextDays.splice(lastIndex + 1, 0, newDay);
-  } else {
-    nextDays.push(newDay);
-  }
-  return nextDays;
-}
-
-export function removeRangeDaySlot(rangeDays: RangeDay[], id: string) {
-  return rangeDays.filter((d) => d.id !== id);
 }
 
 export function inferScheduleFromEvent(

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import apiList, { withQuery } from "@/apiList";
 import { apiFetch } from "@/lib/api-fetch";
 import { runBulkDelete } from "@/lib/bulk-actions";
@@ -34,11 +35,16 @@ import {
   Calendar,
   DollarSign,
   FileSpreadsheet,
+  Archive,
+  UserX,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { downloadFile } from "@/lib/api-fetch";
 
 type RegStatus = "pending" | "approved" | "rejected";
+
+type EventOption = { _id: string; title: string };
+type BlacklistEntry = { _id: string; email: string; createdAt?: string };
 
 type Registration = {
   _id: string;
@@ -107,6 +113,11 @@ export default function RegistrationsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | RegStatus>("all");
+  const [eventFilter, setEventFilter] = useState("all");
+  const [events, setEvents] = useState<EventOption[]>([]);
+  const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
+  const [blacklistEmail, setBlacklistEmail] = useState("");
+  const [blacklistLoading, setBlacklistLoading] = useState(false);
 
   // selection
   const [selected, setSelected] = useState<Registration | null>(null);
@@ -119,6 +130,7 @@ export default function RegistrationsPage() {
         from: dateFrom || undefined,
         to: dateTo || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
+        eventId: eventFilter === "all" ? undefined : eventFilter,
         page: pageToLoad,
         limit: PAGE_SIZE,
       });
@@ -140,6 +152,21 @@ export default function RegistrationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
+  useEffect(() => {
+    if (authLoading) return;
+    void Promise.all([
+      apiFetch<{ events?: EventOption[] }>(
+        withQuery(apiList.events.list, { page: 1, limit: 100 })
+      ),
+      apiFetch<{ entries?: BlacklistEntry[] }>(apiList.registrations.blacklist),
+    ])
+      .then(([eventResponse, blacklistResponse]) => {
+        setEvents(eventResponse.events || []);
+        setBlacklist(blacklistResponse.entries || []);
+      })
+      .catch((e: any) => toast.error(e?.message || "Failed to load registration settings"));
+  }, [authLoading]);
+
   useAdminSync("registrations", () => {
     if (authLoading) return;
     void load();
@@ -149,9 +176,59 @@ export default function RegistrationsPage() {
     setDateFrom("");
     setDateTo("");
     setStatusFilter("all");
+    setEventFilter("all");
     setTimeout(() => {
       void load(1);
     }, 0);
+  };
+
+  const archive = async (reg: Registration) => {
+    if (!confirm("Archive this registration? It will be removed from the active list.")) return;
+    try {
+      await apiFetch(apiList.registrations.archive(reg._id), { method: "POST" });
+      setIsDialogOpen(false);
+      await load();
+      broadcastAdminSync("registrations");
+      toast.success("Registration archived");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to archive registration");
+    }
+  };
+
+  const addToBlacklist = async (e: FormEvent) => {
+    e.preventDefault();
+    const email = blacklistEmail.trim().toLowerCase();
+    if (!email) return;
+    try {
+      setBlacklistLoading(true);
+      const response = await apiFetch<{ entry: BlacklistEntry }>(
+        apiList.registrations.blacklist,
+        { method: "POST", body: JSON.stringify({ email }) }
+      );
+      setBlacklist((prev) => [response.entry, ...prev.filter((item) => item.email !== response.entry.email)]);
+      setBlacklistEmail("");
+      toast.success("Email blacklisted for all events");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to blacklist email");
+    } finally {
+      setBlacklistLoading(false);
+    }
+  };
+
+  const removeFromBlacklist = async (email: string) => {
+    try {
+      setBlacklistLoading(true);
+      await apiFetch(apiList.registrations.blacklist, {
+        method: "DELETE",
+        body: JSON.stringify({ email }),
+      });
+      setBlacklist((prev) => prev.filter((item) => item.email !== email));
+      toast.success("Email removed from blacklist");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to remove blacklisted email");
+    } finally {
+      setBlacklistLoading(false);
+    }
   };
 
   const approve = async (id: string) => {
@@ -221,6 +298,7 @@ export default function RegistrationsPage() {
           from: dateFrom || undefined,
           to: dateTo || undefined,
           status: statusFilter === "all" ? undefined : statusFilter,
+          eventId: eventFilter === "all" ? undefined : eventFilter,
         }),
         {},
         { fallbackFilename: "registrations.csv" }
@@ -413,16 +491,67 @@ export default function RegistrationsPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className='flex-1 space-y-2'>
+          <Label htmlFor='event-filter'>Event</Label>
+          <Select value={eventFilter} onValueChange={setEventFilter}>
+            <SelectTrigger id='event-filter'>
+              <SelectValue placeholder='All events' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All events</SelectItem>
+              {events.map((event) => (
+                <SelectItem key={event._id} value={event._id}>
+                  {event.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className='flex gap-2'>
           <Button onClick={() => void load(1)} disabled={loading}>
             Apply
           </Button>
-          {(dateFrom || dateTo || statusFilter !== "all") && (
+          {(dateFrom || dateTo || statusFilter !== "all" || eventFilter !== "all") && (
             <Button variant='outline' onClick={clearFilters} disabled={loading}>
               Clear
             </Button>
           )}
         </div>
+      </div>
+
+      <div className='rounded-xl border bg-card p-4 shadow-xs'>
+        <div className='mb-3 flex items-center gap-2'>
+          <UserX className='h-5 w-5' />
+          <div>
+            <h2 className='font-semibold'>Registration blacklist</h2>
+            <p className='text-sm text-muted-foreground'>Blocked emails cannot register for any event.</p>
+          </div>
+        </div>
+        <form onSubmit={addToBlacklist} className='flex flex-col gap-2 sm:flex-row'>
+          <Input
+            type='email'
+            value={blacklistEmail}
+            onChange={(e) => setBlacklistEmail(e.target.value)}
+            placeholder='email@example.com'
+            className='sm:max-w-sm'
+            required
+          />
+          <Button type='submit' disabled={blacklistLoading}>
+            {blacklistLoading ? "Saving..." : "Blacklist email"}
+          </Button>
+        </form>
+        {blacklist.length > 0 && (
+          <div className='mt-3 flex flex-wrap gap-2'>
+            {blacklist.map((entry) => (
+              <div key={entry._id} className='flex items-center gap-2 rounded-full border px-3 py-1 text-sm'>
+                <span>{entry.email}</span>
+                <button type='button' className='text-muted-foreground hover:text-foreground' onClick={() => void removeFromBlacklist(entry.email)} disabled={blacklistLoading} aria-label={`Remove ${entry.email} from blacklist`}>
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <DataTable
@@ -433,6 +562,7 @@ export default function RegistrationsPage() {
           setIsDialogOpen(true);
         }}
         onDelete={remove}
+        onArchive={archive}
         onBulkDelete={handleBulkDelete}
         searchPlaceholder='Search registrations...'
         page={page}

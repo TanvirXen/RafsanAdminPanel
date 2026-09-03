@@ -223,7 +223,7 @@ export default function ShotsPage() {
         {shots.map((shot, index) => (
           <Card key={shot._id} className='overflow-hidden'>
             <CardContent className='p-0'>
-              <div className='relative aspect-video w-full bg-muted'>
+              <div className='relative h-[220px] w-full bg-muted sm:h-[260px] md:h-[280px]'>
                 <Image
                   src={shot.image || "/placeholder.svg"}
                   alt={`Shot ${shot.sequence}`}
@@ -305,7 +305,17 @@ export default function ShotsPage() {
                 setFormData((p) => ({ ...p, image: value || "" }))
               }
               placeholder='Upload or paste image URL'
+              previewClassName='h-[220px] aspect-auto sm:h-[260px] md:h-[280px]'
             />
+            <div className='rounded-lg border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground'>
+              <p className='font-medium text-foreground'>Frontend crop preview</p>
+              <p className='mt-1'>
+                The first two shots appear at 220px high on mobile and 280px high on desktop. Later shots appear in the gallery mosaic at 420px mobile or up to 520px desktop. All placements use <code>object-cover</code>, so edges may be cropped.
+              </p>
+              <p className='mt-1'>
+                Recommended source: landscape image at least 1920 x 1080 px. Keep the subject near the center.
+              </p>
+            </div>
             <div className='space-y-2'>
               <Label htmlFor='sequence'>Sequence Number</Label>
               <Input

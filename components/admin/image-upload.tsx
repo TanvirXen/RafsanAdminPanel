@@ -20,6 +20,7 @@ interface ImageUploadProps {
   maxSizeMB?: number;
   allowUrlInput?: boolean;
   error?: string;
+  previewClassName?: string;
 }
 
 export function ImageUpload({
@@ -31,6 +32,7 @@ export function ImageUpload({
   maxSizeMB = 10,
   allowUrlInput = true,
   error,
+  previewClassName = "aspect-video",
 }: ImageUploadProps) {
   const [preview, setPreview] = useState<string>(value || "");
   const [isDragging, setIsDragging] = useState(false);
@@ -129,7 +131,7 @@ export function ImageUpload({
       </Label>
 
       {preview && (
-        <div className='relative aspect-video w-full overflow-hidden rounded-lg border bg-muted'>
+        <div className={`relative w-full overflow-hidden rounded-lg border bg-muted ${previewClassName}`}>
           {/* If you serve images from a different domain, allow it in next.config.js -> images.domains */}
           <Image
             src={preview || "/placeholder.svg"}

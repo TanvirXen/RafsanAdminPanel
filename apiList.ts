@@ -67,6 +67,8 @@ const apiList = {
   registrations: {
     list: path("registrations"),
     export: path("registrations", "export"),
+    blacklist: path("registrations", "blacklist"),
+    archive: (id: string) => path("registrations", id, "archive"),
     create: path("registrations"),
     get: (id: string) => path("registrations", id),
     update: (id: string) => path("registrations", id),
