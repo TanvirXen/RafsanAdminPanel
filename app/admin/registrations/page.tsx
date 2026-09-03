@@ -471,6 +471,11 @@ export default function RegistrationsPage() {
     return [...primary, ...rest];
   }, [selected]);
 
+  const isImageField = (key: string) =>
+    (selected?.imageFields || []).some(
+      (fieldName) => String(fieldName).toLowerCase() === key.toLowerCase()
+    );
+
   return (
     <div className='flex flex-col gap-6 p-6 lg:p-8'>
       <PageHeader
@@ -641,7 +646,7 @@ export default function RegistrationsPage() {
                           <span className='text-muted-foreground'>
                             {prettyLabel(k)}:
                           </span>{" "}
-                          {selected.imageFields?.includes(k) && typeof v === "string" ? (
+                          {isImageField(k) && typeof v === "string" ? (
                             <PrivateRegistrationImage imageId={v} />
                           ) : (
                             <span>{renderValue(v)}</span>
