@@ -75,6 +75,11 @@ const apiList = {
     delete: (id: string) => path("registrations", id),
   },
 
+  registrationImages: {
+    upload: path("registration-images"),
+    get: (id: string) => path("registration-images", id),
+  },
+
   payments: {
     list: path("payments"),
     export: path("payments", "export"),

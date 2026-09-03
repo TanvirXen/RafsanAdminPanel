@@ -51,6 +51,7 @@ interface Event {
   description: string;
   imageLinkBg?: string;
   imageLinkOverlay?: string;
+  backgroundImage?: string;
   category?: string;
   ticketUrl?: string;
   city?: string;

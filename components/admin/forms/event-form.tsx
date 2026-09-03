@@ -41,7 +41,7 @@ type Brand = { _id: string; brandName: string; imageLink?: string };
 interface CustomField {
   id: string;
   name: string;
-  type: "text" | "email" | "phone" | "number" | "select" | "textarea";
+  type: "text" | "email" | "phone" | "number" | "select" | "textarea" | "image";
   label: string;
   required: boolean;
   options?: string[];
@@ -55,6 +55,7 @@ interface EventFormData {
   description: string;
   imageLinkBg: string;
   imageLinkOverlay: string;
+  backgroundImage: string;
   brands: string[];
   customFields: CustomField[];
   category: EventCategory;
@@ -81,6 +82,7 @@ interface EventFormProps {
     description?: string;
     imageLinkBg?: string;
     imageLinkOverlay?: string;
+    backgroundImage?: string;
     brands?: Array<string | { _id: string; brandName?: string }>;
     customFields?: CustomField[] | unknown;
     category?: string;
@@ -107,6 +109,7 @@ interface EventFormErrors {
   showKey?: string;
   imageLinkBg?: string;
   imageLinkOverlay?: string;
+  backgroundImage?: string;
   schedule?: string;
   singleDateTime?: string;
   rangeStartDate?: string;
@@ -265,6 +268,7 @@ function buildInitialFormData(
     description: initialData?.description || "",
     imageLinkBg: initialData?.imageLinkBg || "",
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
+    backgroundImage: initialData?.backgroundImage || "",
     brands: brandIds,
     customFields: initialData
       ? sanitizeFields(initialData.customFields)
@@ -542,6 +546,7 @@ export function EventForm({
       description: formData.description.trim(),
       imageLinkBg: formData.imageLinkBg.trim(),
       imageLinkOverlay: isWhatAShow ? "" : formData.imageLinkOverlay.trim(),
+      backgroundImage: isWhatAShow ? formData.backgroundImage.trim() : "",
       customFields: normalizedCustomFields,
       ticketUrl: formData.ticketUrl.trim(),
       city: formData.city.trim(),
@@ -875,8 +880,9 @@ export function EventForm({
 
       {isWhatAShow ? (
         <div className='space-y-2'>
-          <ImageUpload
-            label='Banner Image'
+          <div className='grid gap-4 md:grid-cols-2'>
+            <ImageUpload
+            label='Poster Image (9:16)'
             value={formData.imageLinkBg}
             onChange={(imageLinkBg) => {
               clearErrors("imageLinkBg");
@@ -885,10 +891,22 @@ export function EventForm({
             placeholder='Upload banner image'
             required
             allowUrlInput={false}
+            previewClassName='aspect-[9/16]'
             error={errors.imageLinkBg}
-          />
+            />
+            <ImageUpload
+              label='Background Image (16:9)'
+              value={formData.backgroundImage}
+              onChange={(backgroundImage) =>
+                setFormData((current) => ({ ...current, backgroundImage }))
+              }
+              placeholder='Upload background image'
+              allowUrlInput={false}
+              previewClassName='aspect-video'
+            />
+          </div>
           <p className='text-sm text-muted-foreground'>
-            What a Show events use a single banner image only.
+            Use a 1080x1920 poster (9:16) and a 1920x1080 background (16:9). The background is optional and the poster is used as a fallback.
           </p>
         </div>
       ) : (
@@ -1080,6 +1098,7 @@ export function EventForm({
                             <SelectItem value='select'>
                               Dropdown Select
                             </SelectItem>
+                            <SelectItem value='image'>Image Upload</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

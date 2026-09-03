@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import apiList, { withQuery } from "@/apiList";
-import { apiFetch } from "@/lib/api-fetch";
+import { apiFetch, getToken } from "@/lib/api-fetch";
 import { runBulkDelete } from "@/lib/bulk-actions";
 import { resolvePagination } from "@/lib/pagination";
 import { useAuth } from "@/hooks/use-auth";
@@ -59,6 +59,7 @@ type Registration = {
   paymentId?: string;
   status: RegStatus;
   notes?: string;
+  imageFields?: string[];
 };
 
 type ApiListResponse = {
@@ -96,6 +97,40 @@ function renderValue(v: any): string {
   }
   if (typeof v === "boolean") return v ? "Yes" : "No";
   return String(v);
+}
+
+function PrivateRegistrationImage({ imageId }: { imageId: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+
+    (async () => {
+      try {
+        const token = getToken();
+        const response = await fetch(apiList.registrationImages.get(imageId), {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!response.ok) throw new Error("Image unavailable");
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setSrc(objectUrl);
+      } catch {
+        if (active) setFailed(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [imageId]);
+
+  if (failed) return <span className='text-muted-foreground'>Image unavailable</span>;
+  if (!src) return <span className='text-muted-foreground'>Loading image...</span>;
+  return <img src={src} alt='Private registration upload' className='mt-2 max-h-64 max-w-full rounded-md border object-contain' />;
 }
 
 export default function RegistrationsPage() {
@@ -606,7 +641,11 @@ export default function RegistrationsPage() {
                           <span className='text-muted-foreground'>
                             {prettyLabel(k)}:
                           </span>{" "}
-                          <span>{renderValue(v)}</span>
+                          {selected.imageFields?.includes(k) && typeof v === "string" ? (
+                            <PrivateRegistrationImage imageId={v} />
+                          ) : (
+                            <span>{renderValue(v)}</span>
+                          )}
                         </div>
                       </div>
                     ))
