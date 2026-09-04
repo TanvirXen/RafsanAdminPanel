@@ -60,6 +60,7 @@ type Registration = {
   status: RegStatus;
   notes?: string;
   imageFields?: string[];
+  emailHistory?: { approved: number; rejected: number };
 };
 
 type ApiListResponse = {
@@ -415,6 +416,16 @@ export default function RegistrationsPage() {
               reg.eventDate || reg.createdAt || Date.now()
             ).toLocaleDateString()}
           </div>
+        </div>
+      ),
+    },
+    {
+      key: "emailHistory",
+      label: "Email history",
+      render: (reg: Registration) => (
+        <div className='space-y-1 text-xs'>
+          <div className='font-medium'>Approved before: {reg.emailHistory?.approved ?? 0}</div>
+          <div className='text-muted-foreground'>Rejected before: {reg.emailHistory?.rejected ?? 0}</div>
         </div>
       ),
     },
