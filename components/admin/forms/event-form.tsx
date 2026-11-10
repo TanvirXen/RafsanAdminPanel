@@ -60,6 +60,7 @@ interface EventFormData {
   customFields: CustomField[];
   category: EventCategory;
   ticketUrl: string;
+  mapLink: string;
   city: string;
   country: string;
   schedule: EventScheduleFormValue;
@@ -87,6 +88,7 @@ interface EventFormProps {
     customFields?: CustomField[] | unknown;
     category?: string;
     ticketUrl?: string;
+    mapLink?: string;
     city?: string;
     country?: string;
   };
@@ -106,6 +108,7 @@ interface EventFormErrors {
   title?: string;
   venue?: string;
   ticketUrl?: string;
+  mapLink?: string;
   showKey?: string;
   imageLinkBg?: string;
   imageLinkOverlay?: string;
@@ -275,6 +278,7 @@ function buildInitialFormData(
       : getDefaultCustomFields(),
     category: normalizeEventCategoryValue(initialData?.category),
     ticketUrl: initialData?.ticketUrl || "",
+    mapLink: initialData?.mapLink || "",
     city: initialData?.city || "",
     country: initialData?.country || "",
     schedule: inferScheduleFromEvent(initialData),
@@ -382,6 +386,10 @@ export function EventForm({
 
     if (formData.ticketUrl.trim() && !isValidHttpUrl(formData.ticketUrl.trim())) {
       nextErrors.ticketUrl = "Enter a valid ticket URL starting with http or https";
+    }
+
+    if (formData.mapLink.trim() && !isValidHttpUrl(formData.mapLink.trim())) {
+      nextErrors.mapLink = "Enter a valid map link starting with http or https";
     }
 
     if (isWhatAShow) {
@@ -549,6 +557,7 @@ export function EventForm({
       backgroundImage: isWhatAShow ? formData.backgroundImage.trim() : "",
       customFields: normalizedCustomFields,
       ticketUrl: formData.ticketUrl.trim(),
+      mapLink: formData.mapLink.trim(),
       city: formData.city.trim(),
       country: formData.country.trim(),
     });
@@ -807,6 +816,33 @@ export function EventForm({
               {errors.ticketUrl}
             </p>
           ) : null}
+        </div>
+
+        <div className='space-y-2'>
+          <Label htmlFor='mapLink'>Google Map Link</Label>
+          <Input
+            id='mapLink'
+            value={formData.mapLink}
+            onChange={(event) => {
+              clearErrors("mapLink");
+              setFormData((current) => ({
+                ...current,
+                mapLink: event.target.value,
+              }));
+            }}
+            aria-invalid={!!errors.mapLink}
+            aria-describedby={errors.mapLink ? "map-link-error" : undefined}
+            placeholder='https://maps.google.com/...'
+          />
+          {errors.mapLink ? (
+            <p id='map-link-error' className='text-sm text-destructive'>
+              {errors.mapLink}
+            </p>
+          ) : (
+            <p className='text-xs text-muted-foreground'>
+              Shown on the event page and included in confirmation emails.
+            </p>
+          )}
         </div>
       </div>
 
