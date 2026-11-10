@@ -228,6 +228,13 @@ const apiList = {
   upload: {
     image: "https://api.rafsansabab.com/api/upload-image",
   },
+
+  appRelease: {
+    latest: path("app-release", "latest"), // public: latest build for download
+    list: path("app-release"), // admin: history
+    upload: path("app-release"), // admin: POST multipart (apk, version, notes)
+    delete: (id: string) => path("app-release", id),
+  },
 };
 
 export default apiList;

@@ -1,7 +1,10 @@
 "use client";
 
 import type React from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import apiList from "@/apiList";
+import { apiFetch } from "@/lib/api-fetch";
 import {
   LayoutDashboard,
   Film,
@@ -15,6 +18,8 @@ import {
   LogOut,
   ImageIcon,
   UserCog,
+  Smartphone,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -25,11 +30,14 @@ type NavItem = {
   name: string;
   href: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  adminOnly?: boolean;
 };
+
+type LatestApk = { version: string; url: string } | null;
 
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { name: "Users", href: "/admin/users", icon: UserCog },
+  { name: "Users", href: "/admin/users", icon: UserCog, adminOnly: true },
   { name: "Shows", href: "/admin/shows", icon: Film },
   { name: "Events", href: "/admin/events", icon: Calendar },
   { name: "Registrations", href: "/admin/registrations", icon: Users },
@@ -42,19 +50,22 @@ const navigation: NavItem[] = [
   { name: "Settings", href: "/admin/settings", icon: SettingsIcon },
   { name: "Newsletter", href: "/admin/newsletter", icon: Users },
   { name: "Contact", href: "/admin/contact", icon: Users },
+  { name: "App Release", href: "/admin/app-release", icon: Smartphone, adminOnly: true },
 ];
 
 function Sidebar({
   onLogout,
   currentPath,
   userRole,
+  latestApk,
 }: {
   onLogout: () => void;
   currentPath: string;
   userRole?: "admin" | "editor";
+  latestApk?: LatestApk;
 }) {
   const visibleNavigation = navigation.filter(
-    (item) => item.href !== "/admin/users" || userRole === "admin"
+    (item) => !item.adminOnly || userRole === "admin"
   );
 
   return (
@@ -92,6 +103,34 @@ function Sidebar({
             </Link>
           );
         })}
+
+        {/* Download latest Android APK */}
+        <div className='mt-2 border-t pt-2'>
+          {latestApk ? (
+            <a
+              href={latestApk.url}
+              download
+              className='flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground'
+            >
+              <span className='flex items-center gap-3'>
+                <Download className='h-4 w-4' />
+                Download APK
+              </span>
+              <span className='rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground'>
+                v{latestApk.version}
+              </span>
+            </a>
+          ) : (
+            <Link
+              href='/admin/app-release'
+              className='flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground'
+            >
+              <Download className='h-4 w-4' />
+              Download APK
+              <span className='text-xs opacity-70'>(none yet)</span>
+            </Link>
+          )}
+        </div>
       </nav>
 
       <div className='border-t px-3 py-4'>
@@ -116,6 +155,23 @@ export default function AdminLayout({
   // redirect unauthenticated users automatically
   const { user, isLoading, logout } = useAuth({ redirectOnUnauthed: true });
   const pathname = usePathname();
+  const [latestApk, setLatestApk] = useState<LatestApk>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ release: { version: string; url: string } | null }>(
+      apiList.appRelease.latest
+    )
+      .then((data) => {
+        if (active) setLatestApk(data?.release ?? null);
+      })
+      .catch(() => {
+        // Non-critical: if the latest APK can't be loaded, just hide the badge.
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   if (isLoading) {
     return (
@@ -131,7 +187,7 @@ export default function AdminLayout({
     <div className='flex min-h-screen bg-background text-foreground lg:h-screen'>
       {/* Desktop Sidebar */}
       <aside className='hidden h-screen w-64 shrink-0 border-r bg-background lg:block'>
-        <Sidebar onLogout={logout} currentPath={pathname} userRole={user?.role} />
+        <Sidebar onLogout={logout} currentPath={pathname} userRole={user?.role} latestApk={latestApk} />
       </aside>
 
       {/* Mobile Header + Drawer */}
@@ -149,6 +205,7 @@ export default function AdminLayout({
                   onLogout={logout}
                   currentPath={pathname}
                   userRole={user?.role}
+                  latestApk={latestApk}
                 />
               </SheetContent>
             </Sheet>
