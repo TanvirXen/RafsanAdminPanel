@@ -44,6 +44,7 @@ interface CustomField {
   type: "text" | "email" | "phone" | "number" | "select" | "textarea" | "image";
   label: string;
   required: boolean;
+  placeholder?: string;
   options?: string[];
 }
 
@@ -160,6 +161,7 @@ const makeField = (partial: Partial<CustomField> = {}): CustomField => ({
   type: partial.type || "text",
   label: typeof partial.label === "string" ? partial.label : "",
   required: Boolean(partial.required),
+  placeholder: typeof partial.placeholder === "string" ? partial.placeholder : "",
   options: Array.isArray(partial.options)
     ? partial.options.map((value) => String(value))
     : [],
@@ -210,6 +212,7 @@ const normalizeCustomFieldsForSave = (fields: CustomField[]) =>
     ...field,
     label: field.label.trim(),
     name: buildCustomFieldName(field.name || field.label),
+    placeholder: field.type === "image" ? "" : (field.placeholder || "").trim(),
     options:
       field.type === "select"
         ? (field.options || []).map((option) => option.trim()).filter(Boolean)
@@ -1157,6 +1160,33 @@ export function EventForm({
                         </label>
                       </div>
                     </div>
+
+                    {field.type !== "image" && (
+                      <div className='space-y-2'>
+                        <Label htmlFor={`field-placeholder-${field.id}`}>
+                          Placeholder Text
+                        </Label>
+                        <Input
+                          id={`field-placeholder-${field.id}`}
+                          value={field.placeholder || ""}
+                          onChange={(event) =>
+                            updateCustomField(field.id, {
+                              placeholder: event.target.value,
+                            })
+                          }
+                          placeholder={
+                            field.type === "select"
+                              ? `e.g., Select ${field.label || "an option"}`
+                              : "e.g., Enter your full name"
+                          }
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          {field.type === "select"
+                            ? "Shown as the default dropdown option. Leave empty to use “Select <label>”."
+                            : "Shown inside the empty input. Leave empty to use the field label."}
+                        </p>
+                      </div>
+                    )}
 
                     {field.type === "select" && (
                       <div className='space-y-2'>
