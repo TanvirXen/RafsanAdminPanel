@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import apiList, { withQuery } from "@/apiList";
 import { apiFetch, getToken } from "@/lib/api-fetch";
@@ -154,6 +154,8 @@ export default function RegistrationsPage() {
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
   const [blacklistEmail, setBlacklistEmail] = useState("");
   const [blacklistLoading, setBlacklistLoading] = useState(false);
+  // Server-side search term (name / email). Kept in a ref so load() always sees the latest value.
+  const searchRef = useRef("");
 
   // selection
   const [selected, setSelected] = useState<Registration | null>(null);
@@ -167,6 +169,7 @@ export default function RegistrationsPage() {
         to: dateTo || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
         eventId: eventFilter === "all" ? undefined : eventFilter,
+        q: searchRef.current || undefined,
         page: pageToLoad,
         limit: PAGE_SIZE,
       });
@@ -335,6 +338,7 @@ export default function RegistrationsPage() {
           to: dateTo || undefined,
           status: statusFilter === "all" ? undefined : statusFilter,
           eventId: eventFilter === "all" ? undefined : eventFilter,
+          q: searchRef.current || undefined,
         }),
         {},
         { fallbackFilename: "registrations.csv" }
@@ -622,6 +626,11 @@ export default function RegistrationsPage() {
         paginationLabel='registrations'
         onPageChange={(nextPage) => void load(nextPage)}
         isPageLoading={loading}
+        onSearchChange={(query) => {
+          if (query === searchRef.current) return;
+          searchRef.current = query;
+          if (!authLoading) void load(1);
+        }}
       />
 
       {/* Details / Approve / Reject */}

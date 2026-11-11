@@ -34,6 +34,8 @@ interface DataTableProps<T> {
   paginationLabel?: string
   onPageChange?: (page: number) => void
   isPageLoading?: boolean
+  /** When provided, search is handled by the caller (e.g. server-side) instead of filtering loaded rows. */
+  onSearchChange?: (query: string) => void
 }
 
 export function DataTable<T extends { _id?: string; id?: string }>({
@@ -54,6 +56,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   paginationLabel = "items",
   onPageChange,
   isPageLoading = false,
+  onSearchChange,
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -63,13 +66,23 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   const normalizedQuery = searchQuery.toLowerCase()
   const filteredData = useMemo(
     () =>
-      data.filter((item) =>
-        Object.values(item).some((value) =>
-          String(value).toLowerCase().includes(normalizedQuery),
-        ),
-      ),
-    [data, normalizedQuery],
+      onSearchChange
+        ? data
+        : data.filter((item) =>
+            Object.values(item).some((value) =>
+              String(value).toLowerCase().includes(normalizedQuery),
+            ),
+          ),
+    [data, normalizedQuery, onSearchChange],
   )
+
+  // Debounce external (server-side) search so we don't fire a request per keystroke.
+  useEffect(() => {
+    if (!onSearchChange) return
+    const timer = setTimeout(() => onSearchChange(searchQuery.trim()), 350)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery])
 
   const getRowId = (item: T) => {
     const rawId = item._id ?? item.id
