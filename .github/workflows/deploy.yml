@@ -1,0 +1,99 @@
+name: Deploy admin panel to VPS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two deploys at once.
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, rafsan-admin]
+    timeout-minutes: 30
+
+    env:
+      APP_NAME: rafsan-admin
+      APP_DIR: /app/rafsan-admin
+      APP_PORT: "3300"
+      # NEXT_PUBLIC_API_BASE etc. Lives only on the VPS, never in git.
+      # Overridden by the ENV_FILE repo secret if that is set.
+      SERVER_ENV: /etc/rafsan-admin/.env.production
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      YARN: npx --yes yarn@1.22.22
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node version
+        run: node -v && npm -v
+
+      - name: Prepare env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "${ENV_FILE}" ]; then
+            printf '%s\n' "${ENV_FILE}" > .env.production
+            echo "Using ENV_FILE secret"
+          elif sudo test -f "${SERVER_ENV}"; then
+            sudo cat "${SERVER_ENV}" > .env.production
+            echo "Using ${SERVER_ENV}"
+          else
+            echo "No ENV_FILE secret and no ${SERVER_ENV}; refusing to deploy."
+            exit 1
+          fi
+          grep -q '^NEXT_PUBLIC_API_BASE=' .env.production || { echo "NEXT_PUBLIC_API_BASE missing"; exit 1; }
+
+      - name: Install dependencies
+        run: ${YARN} install --frozen-lockfile --production=false --non-interactive
+
+      - name: Build
+        run: ${YARN} build
+
+      # Build happens in the runner workspace while the live site keeps serving;
+      # only the finished output is synced into place.
+      - name: Sync build to ${{ env.APP_DIR }}
+        run: |
+          sudo mkdir -p "${APP_DIR}"
+          sudo rsync -a --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude ".next/cache" \
+            --exclude ".next-dev" \
+            ./ "${APP_DIR}/"
+          sudo chmod 600 "${APP_DIR}/.env.production"
+          rm -f .env.production
+
+      - name: Start / reload with PM2
+        run: |
+          cd "${APP_DIR}"
+          if sudo pm2 describe "${APP_NAME}" >/dev/null 2>&1; then
+            sudo pm2 reload "${APP_NAME}" --update-env
+          else
+            sudo pm2 start node_modules/next/dist/bin/next \
+              --name "${APP_NAME}" \
+              --cwd "${APP_DIR}" \
+              --time \
+              --max-memory-restart 700M \
+              -- start -p "${APP_PORT}" -H 127.0.0.1
+          fi
+          sudo pm2 save
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${APP_PORT}/login" || true)
+            if [ "$code" = "200" ]; then echo "Healthy (HTTP $code)"; exit 0; fi
+            sleep 2
+          done
+          echo "Health check failed (last HTTP $code)"
+          sudo pm2 logs "${APP_NAME}" --lines 80 --nostream || true
+          exit 1
