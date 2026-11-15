@@ -48,6 +48,14 @@ type Job = {
   startedBy?: string | null;
 };
 
+type Participant = {
+  _id: string;
+  name: string;
+  email: string;
+  eventDate: string | null;
+  rulesEmailSentAt: string | null;
+};
+
 type RulesResponse = {
   event: { _id: string; title: string; venue?: string };
   rules: string[];
@@ -103,6 +111,11 @@ export default function ParticipantRulesPage() {
 
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
+
+  const [participantQuery, setParticipantQuery] = useState("");
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [sendingOneId, setSendingOneId] = useState<string | null>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -251,6 +264,55 @@ export default function ParticipantRulesPage() {
       toast.error(e?.message || "Test email failed");
     } finally {
       setTesting(false);
+    }
+  };
+
+  // Approved participants for single sends (debounced search)
+  useEffect(() => {
+    if (!eventId || !data) {
+      setParticipants([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        setLoadingParticipants(true);
+        const r = await apiFetch<{ participants: Participant[] }>(
+          withQuery(apiList.participantRules.participants(eventId), {
+            q: participantQuery.trim() || undefined,
+            eventDate: selectedDate && selectedDate !== "null" ? selectedDate : undefined,
+          })
+        );
+        setParticipants(r.participants || []);
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to load participants");
+      } finally {
+        setLoadingParticipants(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, data?.event?._id, participantQuery, dateKey]);
+
+  const sendOne = async (p: Participant) => {
+    if (rulesList.length === 0) return toast.error("Add at least one rule.");
+    try {
+      setSendingOneId(p._id);
+      const r = await apiFetch<{ to: string; queued: boolean; rulesEmailSentAt: string }>(
+        apiList.participantRules.sendOne(eventId),
+        {
+          method: "POST",
+          body: JSON.stringify({ ...contentBody(), eventDate: undefined, registrationId: p._id }),
+        }
+      );
+      toast.success(r.queued ? `Queued for ${r.to} (mail server busy, will retry)` : `Rules sent to ${r.to}`);
+      setParticipants((list) =>
+        list.map((x) => (x._id === p._id ? { ...x, rulesEmailSentAt: r.rulesEmailSentAt } : x))
+      );
+      void load(eventId, { keepEdits: true });
+    } catch (e: any) {
+      toast.error(e?.message || "Send failed");
+    } finally {
+      setSendingOneId(null);
     }
   };
 
@@ -428,7 +490,61 @@ export default function ParticipantRulesPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>4. Send to approved participants</CardTitle>
+                <CardTitle>4. Send to one participant</CardTitle>
+                <CardDescription>
+                  Search an approved participant of this event and send them their real, personalised email.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative">
+                  <Input
+                    value={participantQuery}
+                    onChange={(e) => setParticipantQuery(e.target.value)}
+                    placeholder="Search by name, email or phone"
+                  />
+                  {loadingParticipants && (
+                    <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                <div className="max-h-80 divide-y overflow-y-auto rounded-md border">
+                  {participants.length === 0 ? (
+                    <p className="p-3 text-sm text-muted-foreground">
+                      {loadingParticipants ? "Loading…" : "No approved participants found."}
+                    </p>
+                  ) : (
+                    participants.map((p) => (
+                      <div key={p._id} className="flex items-center justify-between gap-3 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{p.name || "—"}</p>
+                          <p className="truncate text-xs text-muted-foreground">{p.email || "no email"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.rulesEmailSentAt ? `Rules sent ${fmtDhaka(p.rulesEmailSentAt)}` : "Not sent yet"}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={p.rulesEmailSentAt ? "outline" : "default"}
+                          disabled={!p.email || sendingOneId !== null}
+                          onClick={() => void sendOne(p)}
+                        >
+                          {sendingOneId === p._id ? (
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-1 h-4 w-4" />
+                          )}
+                          {p.rulesEmailSentAt ? "Resend" : "Send"}
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Shows up to 50 matches. Search to narrow down.</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>5. Send to all approved participants</CardTitle>
                 <CardDescription>
                   Each participant gets a personalised email with their name, show date and registration ID.
                 </CardDescription>

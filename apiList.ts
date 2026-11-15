@@ -244,6 +244,8 @@ const apiList = {
     preview: (eventId: string) => path("participant-rules", eventId, "preview"),
     test: (eventId: string) => path("participant-rules", eventId, "test"),
     send: (eventId: string) => path("participant-rules", eventId, "send"),
+    participants: (eventId: string) => path("participant-rules", eventId, "participants"),
+    sendOne: (eventId: string) => path("participant-rules", eventId, "send-one"),
     cancel: (eventId: string) => path("participant-rules", eventId, "cancel"),
   },
 };
