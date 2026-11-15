@@ -18,7 +18,7 @@ DOMAIN="admin.rafsansabab.com"
 APP_PORT=3300
 RUNNER_NAME="rafsan-admin-01"
 RUNNER_LABELS="rafsan-admin"
-RUNNER_VERSION="2.321.0"
+RUNNER_VERSION="2.338.2"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (sudo)."; exit 1; }
 
