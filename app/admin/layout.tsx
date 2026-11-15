@@ -20,6 +20,7 @@ import {
   UserCog,
   Smartphone,
   Download,
+  ScrollText,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -41,6 +42,7 @@ const navigation: NavItem[] = [
   { name: "Shows", href: "/admin/shows", icon: Film },
   { name: "Events", href: "/admin/events", icon: Calendar },
   { name: "Registrations", href: "/admin/registrations", icon: Users },
+  { name: "Event Rules", href: "/admin/participant-rules", icon: ScrollText },
   { name: "Payments", href: "/admin/payments", icon: CreditCard },
   { name: "Timeline", href: "/admin/timeline", icon: TrendingUp },
   { name: "Notable Events", href: "/admin/notable-events", icon: Award },

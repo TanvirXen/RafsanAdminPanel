@@ -235,6 +235,17 @@ const apiList = {
     upload: path("app-release"), // admin: POST multipart (apk, version, notes)
     delete: (id: string) => path("app-release", id),
   },
+
+  // Terms & Conditions emails to approved participants
+  participantRules: {
+    defaults: path("participant-rules", "defaults"),
+    get: (eventId: string) => path("participant-rules", eventId),
+    save: (eventId: string) => path("participant-rules", eventId),
+    preview: (eventId: string) => path("participant-rules", eventId, "preview"),
+    test: (eventId: string) => path("participant-rules", eventId, "test"),
+    send: (eventId: string) => path("participant-rules", eventId, "send"),
+    cancel: (eventId: string) => path("participant-rules", eventId, "cancel"),
+  },
 };
 
 export default apiList;
