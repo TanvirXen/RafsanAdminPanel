@@ -58,6 +58,7 @@ interface EventFormData {
   imageLinkOverlay: string;
   backgroundImage: string;
   brands: string[];
+  mainBrands: string[];
   customFields: CustomField[];
   category: EventCategory;
   ticketUrl: string;
@@ -86,6 +87,7 @@ interface EventFormProps {
     imageLinkOverlay?: string;
     backgroundImage?: string;
     brands?: Array<string | { _id: string; brandName?: string }>;
+    mainBrands?: Array<string | { _id: string }>;
     customFields?: CustomField[] | unknown;
     category?: string;
     ticketUrl?: string;
@@ -276,6 +278,13 @@ function buildInitialFormData(
     imageLinkOverlay: initialData?.imageLinkOverlay || "",
     backgroundImage: initialData?.backgroundImage || "",
     brands: brandIds,
+    mainBrands: Array.from(
+      new Set(
+        (initialData?.mainBrands ?? [])
+          .map((b) => (typeof b === "string" ? b : b?._id))
+          .filter((id): id is string => Boolean(id) && brandIds.includes(id as string))
+      )
+    ),
     customFields: initialData
       ? sanitizeFields(initialData.customFields)
       : getDefaultCustomFields(),
@@ -577,11 +586,23 @@ export function EventForm({
 
       onBrandsChange?.(nextBrands);
 
+      const uniqueBrands = Array.from(new Set(nextBrands));
       return {
         ...current,
-        brands: Array.from(new Set(nextBrands)),
+        brands: uniqueBrands,
+        // a brand that is no longer associated can't stay a main collaborator
+        mainBrands: current.mainBrands.filter((id) => uniqueBrands.includes(id)),
       };
     });
+  };
+
+  const toggleMainBrand = (brandId: string, isMain: boolean) => {
+    setFormData((current) => ({
+      ...current,
+      mainBrands: isMain
+        ? Array.from(new Set([...current.mainBrands, brandId]))
+        : current.mainBrands.filter((id) => id !== brandId),
+    }));
   };
 
   const addCustomField = () =>
@@ -981,28 +1002,63 @@ export function EventForm({
         <CardHeader>
           <CardTitle className='text-base'>Associated Brands</CardTitle>
           <CardDescription>
-            Select brands that are sponsoring or associated with this event
+            Select brands that are sponsoring or associated with this event,
+            then mark which are <b>Main</b> collaborators. Main logos show big
+            and centered; the rest are sub collaborators shown smaller on the
+            left and right.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className='grid gap-3 sm:grid-cols-2'>
             {brands.map((brand) => {
               const checked = formData.brands.includes(brand._id);
+              const isMain = formData.mainBrands.includes(brand._id);
               return (
-                <div key={brand._id} className='flex items-center space-x-2'>
-                  <Checkbox
-                    id={`brand-${brand._id}`}
-                    checked={checked}
-                    onCheckedChange={(nextChecked) =>
-                      toggleBrand(brand._id, Boolean(nextChecked))
-                    }
-                  />
-                  <label
-                    htmlFor={`brand-${brand._id}`}
-                    className='text-sm font-medium leading-none'
-                  >
-                    {brand.brandName}
-                  </label>
+                <div
+                  key={brand._id}
+                  className='flex items-center justify-between gap-2 rounded-md border px-3 py-2'
+                >
+                  <div className='flex items-center space-x-2'>
+                    <Checkbox
+                      id={`brand-${brand._id}`}
+                      checked={checked}
+                      onCheckedChange={(nextChecked) =>
+                        toggleBrand(brand._id, Boolean(nextChecked))
+                      }
+                    />
+                    <label
+                      htmlFor={`brand-${brand._id}`}
+                      className='text-sm font-medium leading-none'
+                    >
+                      {brand.brandName}
+                    </label>
+                  </div>
+                  {checked && (
+                    <div className='flex overflow-hidden rounded-md border text-xs'>
+                      <button
+                        type='button'
+                        onClick={() => toggleMainBrand(brand._id, true)}
+                        className={`px-2 py-1 ${
+                          isMain
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        Main
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => toggleMainBrand(brand._id, false)}
+                        className={`px-2 py-1 ${
+                          !isMain
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        Sub
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
