@@ -111,7 +111,7 @@ export default function PaymentsPage() {
           to: dateTo || undefined,
         }),
         {},
-        { fallbackFilename: "payments.csv" }
+        { fallbackFilename: "payments.xlsx" }
       );
       toast.success("Payments export downloaded");
     } catch (e: any) {

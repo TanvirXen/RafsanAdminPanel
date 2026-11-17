@@ -124,7 +124,7 @@ export async function downloadFile(
   const blob = await res.blob();
   const filename = parseFilename(
     res.headers.get("content-disposition"),
-    options.fallbackFilename || "download.csv"
+    options.fallbackFilename || "download.xlsx"
   );
 
   const objectUrl = window.URL.createObjectURL(blob);

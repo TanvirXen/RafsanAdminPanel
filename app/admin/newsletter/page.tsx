@@ -155,7 +155,7 @@ export default function NewsletterAdminPage() {
       await downloadFile(
         apiList.newsletter.exportSubscribers,
         {},
-        { fallbackFilename: "newsletter-subscribers.csv" }
+        { fallbackFilename: "newsletter-subscribers.xlsx" }
       );
       toast.success("Subscriber export downloaded");
     } catch (err: any) {

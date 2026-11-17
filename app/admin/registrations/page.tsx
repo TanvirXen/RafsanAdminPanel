@@ -341,7 +341,7 @@ export default function RegistrationsPage() {
           q: searchRef.current || undefined,
         }),
         {},
-        { fallbackFilename: "registrations.csv" }
+        { fallbackFilename: "registrations.xlsx" }
       );
       toast.success("Registrations export downloaded");
     } catch (e: any) {

@@ -145,7 +145,7 @@ export default function AdminContactPage() {
           search: search || undefined,
         }),
         {},
-        { fallbackFilename: "contact-messages.csv" }
+        { fallbackFilename: "contact-messages.xlsx" }
       );
       toast.success("Contact export downloaded");
     } catch (e: any) {
